@@ -1,26 +1,95 @@
 ﻿@page "/"
 
-<div class="hero">
-    <h1>See every sensor. Catch every anomaly.</h1>
-    <p>
-        Smart-X pulls telemetry from thousands of mesh-connected nodes into one gateway,
-        so a dropped connection or a power spike never gets lost in the noise.
-    </p>
-</div>
+<section class="hero">
+    <div class="hero-content">
+        <h1>
+            Monitor your <span class="accent">entire sensor</span>
+            network in real-time.
+        </h1>
+        <p>
+            Smart-X Gateway connects thousands of IoT sensors across your infrastructure. See anomalies before they become problems.
+        </p>
+        <div class="hero-actions">
+            <a href="/sensors" class="btn-primary">Get started</a>
+            <button class="btn-secondary">Learn more</button>
+        </div>
+    </div>
 
-<div class="pillar-grid">
-    <a class="pillar pillar-active" href="/sensors">
-        <h3>Sensor Data Ingestion and Telemetry</h3>
-        <p>Register devices, stream readings, and see spikes the moment they happen.</p>
+    <div class="hero-visual">
+        <div class="hero-visual-element sensor">
+            <div class="metric-label">Connected Sensors</div>
+            <div class="metric-value">1,247</div>
+            <div class="metric-detail">+12% this week</div>
+        </div>
+        <div class="hero-visual-element network">
+            <div class="metric-label">Network Health</div>
+            <div class="metric-value">99.7%</div>
+            <div class="metric-detail">Optimal conditions</div>
+        </div>
+        <div class="hero-visual-element status">
+            <div class="metric-label">Gateway Status</div>
+            <div class="metric-value" style="color: #10b981;">Active</div>
+            <div class="metric-detail">4.2M readings/min</div>
+        </div>
+    </div>
+</section>
+
+<section class="feature-grid">
+    <a href="/sensors" class="feature-card available">
+        <div class="feature-header">
+            <div class="feature-number">01</div>
+            <div class="feature-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2c-2.2 0-4 1.8-4 4s1.8 4 4 4 4-1.8 4-4-1.8-4-4-4zm0 10c-3.3 0-10 1.7-10 5v3h20v-3c0-3.3-6.7-5-10-5z"/>
+                </svg>
+            </div>
+        </div>
+        <h3 class="feature-title">Sensor Network</h3>
+        <p class="feature-description">
+            Register IoT devices, stream real-time telemetry, and monitor sensor health across your entire infrastructure.
+        </p>
+        <div class="feature-footer">
+            <span class="feature-status">Available Now</span>
+            <span class="feature-arrow">→</span>
+        </div>
     </a>
 
-    <div class="pillar pillar-disabled">
-        <h3>Real-Time Command Stream and History</h3>
-        <p>Issue overrides and review history. Arriving in Part 2.</p>
+    <div class="feature-card disabled">
+        <div class="feature-header">
+            <div class="feature-number">02</div>
+            <div class="feature-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="1"/><path d="M12 8v-1m-7 7h-1m14 0h1m-7-7v-1m-6.071 5.929l.707-.707m8.728 0l.707.707m-8.07 8.07l.707.707m8.07-.707l.707.707"/><circle cx="12" cy="12" r="9"/>
+                </svg>
+            </div>
+        </div>
+        <h3 class="feature-title">Remote Control</h3>
+        <p class="feature-description">
+            Issue remote commands to sensors, execute overrides, and review the complete history of all network operations.
+        </p>
+        <div class="feature-footer">
+            <span class="feature-status">Coming Soon</span>
+            <span class="feature-arrow">→</span>
+        </div>
     </div>
 
-    <div class="pillar pillar-disabled">
-        <h3>Network Topology and Mesh Routing</h3>
-        <p>Trace how data hops across the mesh. Arriving in the final build.</p>
+    <div class="feature-card disabled">
+        <div class="feature-header">
+            <div class="feature-number">03</div>
+            <div class="feature-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4v.01"/><path d="M8 12h8"/>
+                </svg>
+            </div>
+        </div>
+        <h3 class="feature-title">Network Topology</h3>
+        <p class="feature-description">
+            Visualize mesh network architecture, trace data hop paths, and optimize routing for maximum reliability.
+        </p>
+        <div class="feature-footer">
+            <span class="feature-status">Coming Soon</span>
+            <span class="feature-arrow">→</span>
+        </div>
     </div>
-</div>
+</section>
+
