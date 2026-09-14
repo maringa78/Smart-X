@@ -1,7 +1,26 @@
 ﻿@page "/"
 
-<PageTitle>Home</PageTitle>
+<div class="hero">
+    <h1>See every sensor. Catch every anomaly.</h1>
+    <p>
+        Smart-X pulls telemetry from thousands of mesh-connected nodes into one gateway,
+        so a dropped connection or a power spike never gets lost in the noise.
+    </p>
+</div>
 
-<h1>Hello, world!</h1>
+<div class="pillar-grid">
+    <a class="pillar pillar-active" href="/sensors">
+        <h3>Sensor Data Ingestion and Telemetry</h3>
+        <p>Register devices, stream readings, and see spikes the moment they happen.</p>
+    </a>
 
-Welcome to your new app.
+    <div class="pillar pillar-disabled">
+        <h3>Real-Time Command Stream and History</h3>
+        <p>Issue overrides and review history. Arriving in Part 2.</p>
+    </div>
+
+    <div class="pillar pillar-disabled">
+        <h3>Network Topology and Mesh Routing</h3>
+        <p>Trace how data hops across the mesh. Arriving in the final build.</p>
+    </div>
+</div>
