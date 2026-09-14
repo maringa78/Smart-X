@@ -50,7 +50,8 @@ app.MapGet("/api/telemetry/{sensorId}", (string sensorId, SensorRegistry registr
 app.MapPost("/api/sensors/{mac}/upload", async (string mac, IFormFile file, SensorRegistry registry) =>
 {
     Directory.CreateDirectory("uploads");
-    var path = Path.Combine("uploads", $"{mac}_{file.FileName}");
+    var safeMac = mac.Replace(":", "-");
+    var path = Path.Combine("uploads", $"{safeMac}_{file.FileName}");
 
     await using var stream = File.Create(path);
     await file.CopyToAsync(stream);
