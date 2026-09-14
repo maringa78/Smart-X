@@ -10,7 +10,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddHttpClient<SmartXApiClient>(client =>
 {
     client.BaseAddress = new Uri(
-        builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7100");
+        builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7008");
 });
 
 var app = builder.Build();
