@@ -5,10 +5,14 @@
 @inject SmartXApiClient Api
 @implements IDisposable
 
-<h1>Sensor Data Ingestion and Telemetry</h1>
+<div style="margin-bottom: var(--space-3xl);">
+    <h1>Sensor Network</h1>
+    <p style="color: var(--text-secondary); font-size: 1.05rem;">Register, monitor, and manage your IoT sensor infrastructure</p>
+</div>
 
 <section class="card">
-    <h2>Register a sensor</h2>
+    <h2>Register new sensor</h2>
+    <p style="color: var(--text-tertiary); margin-bottom: var(--space-lg);">Add a new IoT device to your network</p>
     <EditForm Model="_newSensor" OnValidSubmit="RegisterSensor">
         <div class="form-row">
             <label>MAC address</label>
@@ -19,7 +23,7 @@
             <InputText @bind-Value="_newSensor.DeploymentLocation" placeholder="SubZoneB/Zone1/FacilityA" />
         </div>
         <div class="form-row">
-            <label>Category</label>
+            <label>Sensor category</label>
             <InputSelect @bind-Value="_newSensor.Category">
                 @foreach (var category in Enum.GetValues<SensorCategory>())
                 {
@@ -31,31 +35,54 @@
     </EditForm>
     @if (!string.IsNullOrEmpty(_statusMessage))
     {
-        <p class="status">@_statusMessage</p>
+        <p style="color: var(--color-primary); margin-top: var(--space-lg); font-weight: 500;">✓ @_statusMessage</p>
     }
 </section>
 
 <section class="card">
-    <h2>Registered sensors</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+        <div>
+            <h2>Connected sensors</h2>
+            <p style="color: var(--text-tertiary);">@(_sensors.Count) device@(_sensors.Count != 1 ? "s" : "") registered</p>
+        </div>
+        @if (_sensors.Count > 0)
+        {
+            <span style="font-size: 0.85rem; background: rgba(6, 182, 212, 0.15); color: var(--color-primary); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm);">
+                ✓ Network online
+            </span>
+        }
+    </div>
+
     @if (_sensors.Count == 0)
     {
-        <p>No sensors registered yet.</p>
+        <p style="color: var(--text-tertiary); padding: var(--space-xl) 0; text-align: center;">
+            No sensors registered yet. Add your first sensor to get started.
+        </p>
     }
     else
     {
         <table class="sensor-table">
             <thead>
-                <tr><th>MAC</th><th>Location</th><th>Category</th><th>Attach log/photo</th></tr>
+                <tr>
+                    <th>Device ID</th>
+                    <th>Location</th>
+                    <th>Category</th>
+                    <th>Actions</th>
+                </tr>
             </thead>
             <tbody>
                 @foreach (var sensor in _sensors)
                 {
                     <tr>
-                        <td>@sensor.MacAddress</td>
+                        <td style="font-family: var(--font-mono); font-size: 0.9rem;">@sensor.MacAddress</td>
                         <td>@sensor.DeploymentLocation</td>
-                        <td>@sensor.Category</td>
                         <td>
-                            <InputFile OnChange="@(e => UploadFile(sensor.MacAddress, e))" />
+                            <span style="font-size: 0.85rem; background: rgba(94, 173, 212, 0.1); color: var(--text-secondary); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm); display: inline-block;">
+                                @sensor.Category
+                            </span>
+                        </td>
+                        <td>
+                            <InputFile OnChange="@(e => UploadFile(sensor.MacAddress, e))" style="font-size: 0.85rem; cursor: pointer; color: var(--color-primary);" />
                         </td>
                     </tr>
                 }
@@ -65,13 +92,18 @@
 </section>
 
 <section class="card">
-    <h2 class="live-heading"><span class="live-dot"></span>Live telemetry — priority alerts</h2>
-    <p class="hint">Readings are colour-coded by severity so anomalies stand out immediately.</p>
-    <button class="btn-secondary" @onclick="SimulateReading">Simulate incoming reading</button>
+    <div class="live-indicator">
+        <span class="live-dot"></span>
+        <h2 class="live-heading">Live telemetry stream</h2>
+    </div>
+    <p style="color: var(--text-tertiary); margin-bottom: var(--space-lg);">Real-time sensor readings with severity indicators</p>
+    <button class="btn-secondary" @onclick="SimulateReading">Simulate reading</button>
 
     @if (_telemetry.Count == 0)
     {
-        <p>No telemetry received yet.</p>
+        <p style="color: var(--text-tertiary); padding: var(--space-xl) 0; text-align: center;">
+            Waiting for telemetry data...
+        </p>
     }
     else
     {
@@ -79,10 +111,10 @@
             @foreach (var packet in _telemetry.OrderByDescending(t => t.Timestamp).Take(15))
             {
                 <li class="telemetry-item severity-@packet.Severity">
-                    <span class="badge">@packet.Severity.ToUpper()</span>
+                    <span class="telemetry-badge">@packet.Severity.ToUpper()</span>
                     <span>@packet.SensorId</span>
-                    <span>@packet.Value.ToString("F1")@packet.Unit</span>
-                    <span class="ts">@packet.Timestamp.ToString("HH:mm:ss")</span>
+                    <span style="font-weight: 600; color: var(--text-primary);">@packet.Value.ToString("F1")@packet.Unit</span>
+                    <span class="telemetry-time">@packet.Timestamp.ToString("HH:mm:ss")</span>
                 </li>
             }
         </ul>
@@ -112,7 +144,7 @@
     private async Task RegisterSensor()
     {
         await Api.RegisterSensorAsync(_newSensor);
-        _statusMessage = $"Sensor {_newSensor.MacAddress} registered.";
+        _statusMessage = $"Sensor {_newSensor.MacAddress} registered successfully.";
         _sensors = await Api.GetSensorsAsync();
         _newSensor.MacAddress = string.Empty;
         _newSensor.DeploymentLocation = string.Empty;
@@ -122,16 +154,14 @@
     {
         await using var stream = e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
         var success = await Api.UploadFileAsync(mac, stream, e.File.Name);
-        _statusMessage = success ? $"Uploaded {e.File.Name} to {mac}." : "Upload failed.";
+        _statusMessage = success ? $"Uploaded {e.File.Name}" : "Upload failed.";
     }
 
-    // Demo helper: simulates a telemetry reading arriving at the gateway so the
-    // severity-based dashboard feature can be shown without live hardware.
     private async Task SimulateReading()
     {
         if (_sensors.Count == 0)
         {
-            _statusMessage = "Register a sensor first.";
+            _statusMessage = "Register a sensor first to simulate readings.";
             return;
         }
 
