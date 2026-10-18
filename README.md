@@ -1,6 +1,10 @@
 # Smart-X Gateway
 
+
 A premium, modern industrial IoT platform for monitoring and managing sensor networks in real-time. Smart-X Gateway connects thousands of IoT sensors across your infrastructure, providing real-time telemetry, anomaly detection, and network health monitoring.
+
+Link to GitHub: https://github.com/EMWCCN/PROG7312_POE_Gr2_St10287116.git
+Link to youtube: https://www.youtube.com/watch?v=62TH5MTy8qI
 
 ## Project Overview
 
