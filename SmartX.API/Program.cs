@@ -10,6 +10,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<SensorRegistry>();
 builder.Services.AddSingleton<TelemetryPipeline>();
+builder.Services.AddSingleton<CommandHistory>();
 builder.Services.AddHostedService<TelemetryProcessor>();
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
@@ -70,5 +71,30 @@ app.MapPost("/api/sensors/{mac}/upload", async (string mac, IFormFile file, Sens
     return attached ? Results.Ok(new { path }) : Results.NotFound("Sensor not registered.");
 })
 .DisableAntiforgery();
+
+// ---- Manual override commands (Stack-based history with undo) ----
+app.MapPost("/api/commands", (IssueCommandRequest request, CommandHistory commands) =>
+{
+    if (string.IsNullOrWhiteSpace(request.DeviceId) || string.IsNullOrWhiteSpace(request.Name))
+        return Results.BadRequest("DeviceId and Name are required.");
+
+    var state = request.State?.Trim();
+    if (!string.Equals(state, "On", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(state, "Off", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest("State must be 'On' or 'Off'.");
+
+    var normalised = request with { State = string.Equals(state, "On", StringComparison.OrdinalIgnoreCase) ? "On" : "Off" };
+    return Results.Ok(commands.Issue(normalised));
+});
+
+app.MapPost("/api/commands/undo", (CommandHistory commands) =>
+{
+    var undone = commands.Undo();
+    return undone is null
+        ? Results.NotFound("No commands to undo.")
+        : Results.Ok(undone);
+});
+
+app.MapGet("/api/commands/history", (CommandHistory commands) => Results.Ok(commands.History()));
 
 app.Run();
