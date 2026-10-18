@@ -2,12 +2,15 @@ using SmartX.Api;
 using SmartX.Api.Models;
 using SmartX.API;
 using SmartX.API.Models;
+using SmartX.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<SensorRegistry>();
+builder.Services.AddSingleton<TelemetryPipeline>();
+builder.Services.AddHostedService<TelemetryProcessor>();
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
@@ -37,10 +40,17 @@ app.MapGet("/api/sensors/{mac}", (string mac, SensorRegistry registry) =>
 });
 
 // --- Telemetry ingestion ---
-app.MapPost("/api/telemetry", (TelemetryPacket<double> packet, SensorRegistry registry) =>
+app.MapPost("/api/telemetry", (TelemetryPacket<double> packet, TelemetryPipeline pipeline) =>
 {
-    registry.RecordTelemetry(packet);
-    return Results.Ok(packet);
+    var wasCritical = pipeline.Enqueue(packet);
+    return Results.Accepted($"/api/telemetry/{packet.SensorId}", new { packet, wasCritical });
+});
+
+// Shows how many packets are waiting in each queue (useful for testing and the demo)
+app.MapGet("/api/pipeline/status", (TelemetryPipeline pipeline) =>
+{
+    var (standard, critical) = pipeline.Counts();
+    return Results.Ok(new { standardQueued = standard, criticalQueued = critical });
 });
 
 app.MapGet("/api/telemetry/{sensorId}", (string sensorId, SensorRegistry registry) =>
