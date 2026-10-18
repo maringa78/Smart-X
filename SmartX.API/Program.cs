@@ -11,6 +11,8 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<SensorRegistry>();
 builder.Services.AddSingleton<TelemetryPipeline>();
 builder.Services.AddSingleton<CommandHistory>();
+builder.Services.AddSingleton<AlertTracker>();
+builder.Services.AddHostedService<DeviceMonitor>();
 builder.Services.AddHostedService<TelemetryProcessor>();
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
@@ -96,5 +98,12 @@ app.MapPost("/api/commands/undo", (CommandHistory commands) =>
 });
 
 app.MapGet("/api/commands/history", (CommandHistory commands) => Results.Ok(commands.History()));
+
+// ---- Active alerts (HashSet-based, no duplicates) ----
+app.MapGet("/api/alerts", (AlertTracker alerts) => Results.Ok(new
+{
+    active = alerts.Active().Select(a => new { a.DeviceId, type = a.Type.ToString() }),
+    suppressedDuplicates = alerts.SuppressedDuplicates
+}));
 
 app.Run();
