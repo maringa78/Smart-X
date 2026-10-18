@@ -12,6 +12,7 @@ builder.Services.AddSingleton<SensorRegistry>();
 builder.Services.AddSingleton<TelemetryPipeline>();
 builder.Services.AddSingleton<CommandHistory>();
 builder.Services.AddSingleton<AlertTracker>();
+builder.Services.AddSingleton<TelemetryHistory>();
 builder.Services.AddHostedService<DeviceMonitor>();
 builder.Services.AddHostedService<TelemetryProcessor>();
 builder.Services.AddCors(options =>
@@ -105,5 +106,18 @@ app.MapGet("/api/alerts", (AlertTracker alerts) => Results.Ok(new
     active = alerts.Active().Select(a => new { a.DeviceId, type = a.Type.ToString() }),
     suppressedDuplicates = alerts.SuppressedDuplicates
 }));
+
+// ---- Sorted telemetry history (SortedDictionary, oldest first) ----
+// Optional query string: ?from=...&to=...&limit=...
+app.MapGet("/api/history/{sensorId}", (
+    string sensorId,
+    [Microsoft.AspNetCore.Mvc.FromQuery(Name = "from")] DateTime? start,
+    [Microsoft.AspNetCore.Mvc.FromQuery(Name = "to")] DateTime? end,
+    int? limit,
+    TelemetryHistory history) =>
+{
+    var points = history.Query(sensorId, start, end, limit);
+    return Results.Ok(new { sensorId, count = points.Count, points });
+});
 
 app.Run();
