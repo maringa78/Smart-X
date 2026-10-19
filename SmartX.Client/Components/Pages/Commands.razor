@@ -2,6 +2,7 @@
 @using SmartX.Client.Models
 @using SmartX.Client.Services
 @inject SmartXApiClient Api
+@inject AppState State
 @implements IDisposable
 
 <PageTitle>Command Stream &amp; History</PageTitle>
@@ -45,6 +46,47 @@
     </div>
 </section>
 
+<section class="card filter-card">
+    <h2>Find devices</h2>
+    <div class="filter-bar">
+        <div class="form-row">
+            <label for="device-search">Search by device ID or location</label>
+            <input id="device-search" type="text" autocomplete="off"
+                   placeholder="e.g. Hydroponics or AA:BB:CC:DD:EE:11"
+                   value="@State.SearchText"
+                   @oninput="OnSearchInput"
+                   @onkeydown="OnSearchKeyDown" />
+        </div>
+        <div class="form-row">
+            <label for="category-filter">Category</label>
+            <select id="category-filter" value="@(State.CategoryFilter?.ToString() ?? "")" @onchange="OnCategoryChanged">
+                <option value="">All categories</option>
+                @foreach (var category in Enum.GetValues<SensorCategory>())
+                {
+                    <option value="@category">@category</option>
+                }
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="status-filter">Status</label>
+            <select id="status-filter" value="@(State.StatusFilter?.ToString() ?? "")" @onchange="OnStatusChanged">
+                <option value="">All statuses</option>
+                @foreach (var status in Enum.GetValues<DeviceStatus>())
+                {
+                    <option value="@status">@StatusLabel(status)</option>
+                }
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button type="button" class="btn-primary" @onclick="SubmitSearchAsync">Search</button>
+            <button type="button" class="btn-secondary" @onclick="ClearFiltersAsync" disabled="@(!FiltersActive)">Clear</button>
+        </div>
+    </div>
+    <p class="filter-hint">
+        The list narrows as you type. Press Enter or Search to save a search so the Suggested Actions engine can learn from it.
+    </p>
+</section>
+
 <section class="card">
     <div class="live-indicator">
         <span class="live-dot"></span>
@@ -52,12 +94,20 @@
     </div>
     <p style="color: var(--text-tertiary); margin-bottom: var(--space-lg);">
         Refreshes every 2 seconds. Devices that need attention are listed first.
+        Showing @_results.Count of @_devices.Count device@(_devices.Count != 1 ? "s" : "").
     </p>
 
     @if (_devices.Count == 0)
     {
         <p style="color: var(--text-tertiary); padding: var(--space-xl) 0; text-align: center;">
             No devices registered yet. Register sensors, or start the simulator.
+        </p>
+    }
+    else if (_results.Count == 0)
+    {
+        <p style="color: var(--text-tertiary); padding: var(--space-xl) 0; text-align: center;">
+            No devices match your search or filters.
+            <button type="button" class="btn-secondary" @onclick="ClearFiltersAsync">Clear filters</button>
         </p>
     }
     else
@@ -97,11 +147,17 @@
 </section>
 
 @code {
-    private List<SensorRecord> _devices = new();
+    private List<SensorRecord> _devices = new();   // every registered device (for the summary cards)
+    private List<SensorRecord> _results = new();   // devices matching the current search and filters
     private PipelineStatus _queue = new();
     private AlertsResponse _alerts = new();
     private string? _error;
     private readonly CancellationTokenSource _cts = new();
+
+    private bool FiltersActive =>
+        !string.IsNullOrWhiteSpace(State.SearchText) ||
+        State.CategoryFilter is not null ||
+        State.StatusFilter is not null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -125,16 +181,20 @@
         catch (ObjectDisposedException) { }
     }
 
-    private async Task RefreshAsync()
+    // logSearch is true only when the user deliberately submits a search, so the
+    // suggestion engine learns from real searches and not from background refreshes.
+    private async Task RefreshAsync(bool logSearch = false)
     {
         try
         {
             var devicesTask = Api.GetSensorsAsync();
+            var resultsTask = Api.SearchDevicesAsync(State.SearchText, State.CategoryFilter, State.StatusFilter, logSearch);
             var queueTask = Api.GetPipelineStatusAsync();
             var alertsTask = Api.GetAlertsAsync();
-            await Task.WhenAll(devicesTask, queueTask, alertsTask);
+            await Task.WhenAll(devicesTask, resultsTask, queueTask, alertsTask);
 
             _devices = devicesTask.Result;
+            _results = resultsTask.Result;
             _queue = queueTask.Result;
             _alerts = alertsTask.Result;
             _error = null;
@@ -145,9 +205,44 @@
         }
     }
 
+    // ----- Search and filter handlers (the values are kept in AppState) -----
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        State.SearchText = e.Value?.ToString() ?? string.Empty;
+        await RefreshAsync();
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SubmitSearchAsync();
+    }
+
+    private Task SubmitSearchAsync() => RefreshAsync(logSearch: true);
+
+    private async Task OnCategoryChanged(ChangeEventArgs e)
+    {
+        State.CategoryFilter = Enum.TryParse<SensorCategory>(e.Value?.ToString(), out var category) ? category : null;
+        await RefreshAsync();
+    }
+
+    private async Task OnStatusChanged(ChangeEventArgs e)
+    {
+        State.StatusFilter = Enum.TryParse<DeviceStatus>(e.Value?.ToString(), out var status) ? status : null;
+        await RefreshAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        State.SearchText = string.Empty;
+        State.CategoryFilter = null;
+        State.StatusFilter = null;
+        await RefreshAsync();
+    }
+
     // Alert and offline devices first, then online, then devices that have not reported yet.
     private IEnumerable<SensorRecord> SortedDevices =>
-        _devices.OrderBy(d => Rank(d.Status)).ThenBy(d => d.DeploymentLocation);
+        _results.OrderBy(d => Rank(d.Status)).ThenBy(d => d.DeploymentLocation);
 
     private static int Rank(DeviceStatus status) => status switch
     {
