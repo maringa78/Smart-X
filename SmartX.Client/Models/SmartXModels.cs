@@ -65,3 +65,30 @@ public class CommandRecord
     public string PreviousState { get; set; } = string.Empty; // what Undo restores
     public DateTime IssuedAt { get; set; }
 }
+
+/// <summary>A recommendation from the prediction engine, shown as a "Suggested Action".</summary>
+public class SuggestedAction
+{
+    public string Kind { get; set; } = string.Empty;      // "Command", "Search" or "Watch"
+    public string Label { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;    // why the engine suggests it
+    public double Confidence { get; set; }                // 0 to 1
+    public string? DeviceId { get; set; }
+    public string? CommandName { get; set; }
+    public string? State { get; set; }
+    public string? SearchTerm { get; set; }
+}
+
+/// <summary>A device the engine thinks needs attention, shown as an "Automated Insight".</summary>
+public class Insight
+{
+    public string Severity { get; set; } = string.Empty;  // "Critical" or "Warning"
+    public string DeviceId { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+}
+
+public class SuggestionResult
+{
+    public List<SuggestedAction> SuggestedActions { get; set; } = new();
+    public List<Insight> Insights { get; set; } = new();
+}
