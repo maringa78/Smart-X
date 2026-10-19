@@ -11,6 +11,7 @@ namespace SmartX.API.Services
     public class DeviceMonitor(
         SensorRegistry registry,
         AlertTracker alerts,
+        SuggestionEngine suggestions,
         ILogger<DeviceMonitor> logger) : BackgroundService
     {
         // Short values so the behaviour is easy to show in a demo.
@@ -26,6 +27,7 @@ namespace SmartX.API.Services
                     if (alerts.Raise(mac, AlertType.Disconnected))
                     {
                         registry.SetStatus(mac, DeviceStatus.Offline);
+                        suggestions.RecordAlert(mac, AlertType.Disconnected);
                         logger.LogWarning("Device {Mac} has disconnected (no data for {Seconds}s)",
                             mac, OfflineAfter.TotalSeconds);
                     }
