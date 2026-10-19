@@ -23,4 +23,6 @@ public class AppState
     public string SearchText { get; set; } = string.Empty;
     public SensorCategory? CategoryFilter { get; set; }
     public DeviceStatus? StatusFilter { get; set; }
+    public string CommandDeviceId { get; set; } = string.Empty;
+    public string CommandName { get; set; } = "WaterPump";
 }
