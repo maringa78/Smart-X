@@ -54,3 +54,14 @@ public class AlertsResponse
     public List<ActiveAlert> Active { get; set; } = new();
     public int SuppressedDuplicates { get; set; }
 }
+
+/// <summary>One manual override as stored on the API's command stack.</summary>
+public class CommandRecord
+{
+    public Guid Id { get; set; }
+    public string DeviceId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;          // e.g. "WaterPump"
+    public string State { get; set; } = string.Empty;         // new state: "On" or "Off"
+    public string PreviousState { get; set; } = string.Empty; // what Undo restores
+    public DateTime IssuedAt { get; set; }
+}
