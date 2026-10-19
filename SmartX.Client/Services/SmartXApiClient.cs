@@ -26,4 +26,12 @@ public class SmartXApiClient(HttpClient http)
         var response = await http.PostAsync($"/api/sensors/{mac}/upload", content);
         return response.IsSuccessStatusCode;
     }
+
+    // ----- Real-Time Command Stream -----
+
+    public async Task<PipelineStatus> GetPipelineStatusAsync() =>
+        await http.GetFromJsonAsync<PipelineStatus>("/api/pipeline/status") ?? new();
+
+    public async Task<AlertsResponse> GetAlertsAsync() =>
+        await http.GetFromJsonAsync<AlertsResponse>("/api/alerts") ?? new();
 }
