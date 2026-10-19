@@ -53,6 +53,7 @@ public class SmartXApiClient(HttpClient http)
         var url = "/api/devices/search" + (parts.Count > 0 ? "?" + string.Join("&", parts) : "");
         return await http.GetFromJsonAsync<List<SensorRecord>>(url) ?? new();
     }
+
     // ----- Manual overrides (stack-based history with undo) -----
 
     public async Task<CommandRecord?> IssueCommandAsync(string deviceId, string name, string state)
@@ -63,7 +64,7 @@ public class SmartXApiClient(HttpClient http)
             : null;
     }
 
-    /// Pops the newest command off the API's stack. Returns null if there is nothing to undo.
+    /// <summary>Pops the newest command off the API's stack. Returns null if there is nothing to undo.</summary>
     public async Task<CommandRecord?> UndoCommandAsync()
     {
         var response = await http.PostAsync("/api/commands/undo", null);
@@ -74,4 +75,13 @@ public class SmartXApiClient(HttpClient http)
 
     public async Task<List<CommandRecord>> GetCommandHistoryAsync() =>
         await http.GetFromJsonAsync<List<CommandRecord>>("/api/commands/history") ?? new();
+
+    // ----- Predictive suggestions -----
+
+    public async Task<SuggestionResult> GetSuggestionsAsync() =>
+        await http.GetFromJsonAsync<SuggestionResult>("/api/suggestions") ?? new();
+
+    /// <summary>Fills the engine with simulated operator history so the patterns can be demonstrated.</summary>
+    public async Task SeedDemoHistoryAsync() =>
+        await http.PostAsync("/api/suggestions/demo-history", null);
 }
