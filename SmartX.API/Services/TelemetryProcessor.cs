@@ -13,6 +13,10 @@
         TelemetryHistory history,
         ILogger<TelemetryProcessor> logger) : BackgroundService
     {
+        // Models the time real processing takes per packet (e.g. a database write).
+        // It lets the queues build up visibly during a burst. Set to 0 to disable.
+        private const int SimulatedWorkMs = 5;
+
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -39,6 +43,9 @@
                     {
                         alerts.Clear(packet.SensorId, AlertType.CriticalReading);
                     }
+
+                    if (SimulatedWorkMs > 0)
+                        await Task.Delay(SimulatedWorkMs, stoppingToken);
                 }
                 else
                 {
