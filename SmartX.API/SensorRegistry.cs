@@ -73,6 +73,19 @@ namespace SmartX.API
                 return _telemetryLog.Where(t => t.SensorId == sensorId).ToList();
         }
 
+        /// <summary>Finds devices by text (MAC or location), category and/or live status.</summary>
+        public List<SensorRecord> Search(string? query, SensorCategory? category, DeviceStatus? status)
+        {
+            lock (_lock)
+                return _sensors.Values
+                    .Where(s => string.IsNullOrWhiteSpace(query)
+                                || s.MacAddress.Contains(query, StringComparison.OrdinalIgnoreCase)
+                                || s.DeploymentLocation.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    .Where(s => category is null || s.Category == category)
+                    .Where(s => status is null || s.Status == status)
+                    .ToList();
+        }
+
         /// <summary>MAC addresses of devices that have reported before but not within the timeout.</summary>
         public List<string> GetStaleDevices(TimeSpan timeout)
         {
