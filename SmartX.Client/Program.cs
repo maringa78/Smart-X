@@ -13,6 +13,9 @@ builder.Services.AddHttpClient<SmartXApiClient>(client =>
         builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7008");
 });
 
+// One instance per browser session, shared by every page, so state survives navigation.
+builder.Services.AddScoped<AppState>();
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
