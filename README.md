@@ -4,7 +4,7 @@ An IoT gateway and management dashboard for monitoring distributed sensor networ
 
 - GitHub: https://github.com/EMWCCN/PROG7312_POE_Gr2_St10287116.git
 - YouTube demo (Part 1): https://www.youtube.com/watch?v=62TH5MTy8qI
-- YouTube demo (Part 2): _add link here_
+- YouTube demo (Part 2): https://youtu.be/WAZFYqw265o
 
 ## Contents
 
