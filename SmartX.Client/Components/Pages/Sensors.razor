@@ -1,8 +1,8 @@
 ﻿@page "/sensors"
-@rendermode InteractiveServer
 @using SmartX.Client.Models
 @using SmartX.Client.Services
 @inject SmartXApiClient Api
+@inject AppState State
 @implements IDisposable
 
 <div style="margin-bottom: var(--space-3xl);">
@@ -13,18 +13,18 @@
 <section class="card">
     <h2>Register new sensor</h2>
     <p style="color: var(--text-tertiary); margin-bottom: var(--space-lg);">Add a new IoT device to your network</p>
-    <EditForm Model="_newSensor" OnValidSubmit="RegisterSensor">
+    <EditForm Model="State.NewSensorDraft" OnValidSubmit="RegisterSensor">
         <div class="form-row">
             <label>MAC address</label>
-            <InputText @bind-Value="_newSensor.MacAddress" placeholder="AA:BB:CC:00:11:22" />
+            <InputText @bind-Value="State.NewSensorDraft.MacAddress" placeholder="AA:BB:CC:00:11:22" />
         </div>
         <div class="form-row">
             <label>Deployment location</label>
-            <InputText @bind-Value="_newSensor.DeploymentLocation" placeholder="SubZoneB/Zone1/FacilityA" />
+            <InputText @bind-Value="State.NewSensorDraft.DeploymentLocation" placeholder="SubZoneB/Zone1/FacilityA" />
         </div>
         <div class="form-row">
             <label>Sensor category</label>
-            <InputSelect @bind-Value="_newSensor.Category">
+            <InputSelect @bind-Value="State.NewSensorDraft.Category">
                 @foreach (var category in Enum.GetValues<SensorCategory>())
                 {
                     <option value="@category">@category</option>
@@ -33,9 +33,9 @@
         </div>
         <button type="submit" class="btn-primary">Register sensor</button>
     </EditForm>
-    @if (!string.IsNullOrEmpty(_statusMessage))
+    @if (!string.IsNullOrEmpty(State.SensorsStatusMessage))
     {
-        <p style="color: var(--color-primary); margin-top: var(--space-lg); font-weight: 500;">✓ @_statusMessage</p>
+        <p style="color: var(--color-primary); margin-top: var(--space-lg); font-weight: 500;">✓ @State.SensorsStatusMessage</p>
     }
 </section>
 
@@ -99,7 +99,7 @@
     <p style="color: var(--text-tertiary); margin-bottom: var(--space-lg);">Real-time sensor readings with severity indicators</p>
     <button class="btn-secondary" @onclick="SimulateReading">Simulate reading</button>
 
-    @if (_telemetry.Count == 0)
+    @if (State.TelemetryFeed.Count == 0)
     {
         <p style="color: var(--text-tertiary); padding: var(--space-xl) 0; text-align: center;">
             Waiting for telemetry data...
@@ -108,7 +108,7 @@
     else
     {
         <ul class="telemetry-feed">
-            @foreach (var packet in _telemetry.OrderByDescending(t => t.Timestamp).Take(15))
+            @foreach (var packet in State.TelemetryFeed.OrderByDescending(t => t.Timestamp).Take(15))
             {
                 <li class="telemetry-item severity-@packet.Severity">
                     <span class="telemetry-badge">@packet.Severity.ToUpper()</span>
@@ -122,10 +122,7 @@
 </section>
 
 @code {
-    private readonly SensorRecord _newSensor = new();
     private List<SensorRecord> _sensors = new();
-    private List<TelemetryPacket> _telemetry = new();
-    private string? _statusMessage;
     private readonly Random _random = new();
     private Timer? _pollTimer;
 
@@ -143,25 +140,25 @@
 
     private async Task RegisterSensor()
     {
-        await Api.RegisterSensorAsync(_newSensor);
-        _statusMessage = $"Sensor {_newSensor.MacAddress} registered successfully.";
+        await Api.RegisterSensorAsync(State.NewSensorDraft);
+        State.SensorsStatusMessage = $"Sensor {State.NewSensorDraft.MacAddress} registered successfully.";
         _sensors = await Api.GetSensorsAsync();
-        _newSensor.MacAddress = string.Empty;
-        _newSensor.DeploymentLocation = string.Empty;
+        State.NewSensorDraft.MacAddress = string.Empty;
+        State.NewSensorDraft.DeploymentLocation = string.Empty;
     }
 
     private async Task UploadFile(string mac, Microsoft.AspNetCore.Components.Forms.InputFileChangeEventArgs e)
     {
         await using var stream = e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
         var success = await Api.UploadFileAsync(mac, stream, e.File.Name);
-        _statusMessage = success ? $"Uploaded {e.File.Name}" : "Upload failed.";
+        State.SensorsStatusMessage = success ? $"Uploaded {e.File.Name}" : "Upload failed.";
     }
 
     private async Task SimulateReading()
     {
         if (_sensors.Count == 0)
         {
-            _statusMessage = "Register a sensor first to simulate readings.";
+            State.SensorsStatusMessage = "Register a sensor first to simulate readings.";
             return;
         }
 
@@ -174,7 +171,7 @@
         };
 
         await Api.SubmitTelemetryAsync(packet);
-        _telemetry.Add(packet);
+        State.TelemetryFeed.Add(packet);
     }
 
     public void Dispose() => _pollTimer?.Dispose();
