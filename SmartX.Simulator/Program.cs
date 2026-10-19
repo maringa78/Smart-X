@@ -18,7 +18,7 @@ using var http = new HttpClient(handler) { BaseAddress = new Uri(baseUrl) };
 
 var rnd = new Random();
 
-// Category numbers match the API: 0 = Environmental, 1 = PowerConsumption, 2 = Activator
+// Category numbers match the API: 0 = Environmental, 1 = PowerConsumption, 2 = Actuator
 var devices = new List<Device>
 {
     new("AA:BB:CC:DD:EE:11", "Hydroponics Farm - Zone 1",   0, "%", 40, 70, 55),
