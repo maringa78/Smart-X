@@ -1,8 +1,11 @@
 ﻿@inherits LayoutComponentBase
+@inject IJSRuntime JS
 
 <div class="page">
     <header class="topbar">
-        <div class="brand">Smart-X Gateway</div>
+        <div class="brand">
+            <img src="images/smartx-logo.svg" alt="Smart-X Gateway" />
+        </div>
         <nav class="topbar-nav" aria-label="Main navigation">
             <NavLink href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
             <NavLink href="/sensors">Sensor Ingestion &amp; Telemetry</NavLink>
@@ -10,9 +13,47 @@
             <span class="nav-disabled" aria-disabled="true" title="Coming in the final PoE">
                 Network Topology &amp; Mesh Routing
             </span>
+            <button type="button"
+                    class="theme-toggle @(_isDarkTheme ? "is-dark" : "")"
+                    aria-label="@(_isDarkTheme ? "Switch to light mode" : "Switch to dark mode")"
+                    aria-pressed="@_isDarkTheme"
+                    @onclick="ToggleThemeAsync">
+                <span class="theme-toggle-label">@(_isDarkTheme ? "Dark" : "Light") mode</span>
+                <span class="theme-toggle-track" aria-hidden="true">
+                    <span class="theme-toggle-thumb"></span>
+                </span>
+            </button>
         </nav>
     </header>
-    <main>
+    <main class="page-content">
         @Body
     </main>
 </div>
+
+@code {
+    private bool _isDarkTheme;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var savedTheme = await JS.InvokeAsync<string?>("smartXTheme.get");
+        var isDarkTheme = savedTheme == "dark";
+        await JS.InvokeVoidAsync("smartXTheme.set", isDarkTheme ? "dark" : "light");
+
+        if (_isDarkTheme != isDarkTheme)
+        {
+            _isDarkTheme = isDarkTheme;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleThemeAsync()
+    {
+        _isDarkTheme = !_isDarkTheme;
+        await JS.InvokeVoidAsync("smartXTheme.set", _isDarkTheme ? "dark" : "light");
+    }
+}

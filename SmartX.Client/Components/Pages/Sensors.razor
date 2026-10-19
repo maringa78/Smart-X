@@ -35,7 +35,7 @@
     </EditForm>
     @if (!string.IsNullOrEmpty(State.SensorsStatusMessage))
     {
-        <p style="color: var(--color-primary); margin-top: var(--space-lg); font-weight: 500;">✓ @State.SensorsStatusMessage</p>
+        <p class="sensor-status-message">@State.SensorsStatusMessage</p>
     }
 </section>
 
@@ -47,8 +47,8 @@
         </div>
         @if (_sensors.Count > 0)
         {
-            <span style="font-size: 0.85rem; background: rgba(6, 182, 212, 0.15); color: var(--color-primary); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-sm);">
-                ✓ Network online
+            <span class="network-status-pill">
+                Network online
             </span>
         }
     </div>
@@ -93,7 +93,6 @@
 
 <section class="card">
     <div class="live-indicator">
-        <span class="live-dot"></span>
         <h2 class="live-heading">Live telemetry stream</h2>
     </div>
     <p style="color: var(--text-tertiary); margin-bottom: var(--space-lg);">Real-time sensor readings with severity indicators</p>

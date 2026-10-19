@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80">
+  <defs>
+    <!-- Modern Gradient Palette -->
+    <linearGradient id="smartx-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#A855F7" />
+    </linearGradient>
+    
+    <linearGradient id="node-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE" />
+      <stop offset="100%" stop-color="#6366F1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Logo Mark (Mesh Node Geometry) -->
+  <g transform="translate(10, 10)">
+    <!-- Outer Connecting Mesh Network -->
+    <path d="M 30 10 L 50 25 L 50 45 L 30 60 L 10 45 L 10 25 Z" fill="none" stroke="url(#smartx-grad)" stroke-width="3" stroke-linejoin="round" />
+          
+    <!-- Inner Gateway Core -->
+    <path d="M 30 20 L 42 30 L 42 40 L 30 50 L 18 40 L 18 30 Z" fill="url(#smartx-grad)" opacity="0.85" />
+          
+    <!-- Connected Mesh Nodes -->
+    <circle cx="30" cy="10" r="4" fill="url(#node-glow)" />
+    <circle cx="50" cy="25" r="4" fill="url(#node-glow)" />
+    <circle cx="50" cy="45" r="4" fill="url(#node-glow)" />
+    <circle cx="30" cy="60" r="4" fill="url(#node-glow)" />
+    <circle cx="10" cy="45" r="4" fill="url(#node-glow)" />
+    <circle cx="10" cy="25" r="4" fill="url(#node-glow)" />
+  </g>
+
+  <!-- Typography -->
+  <text x="80" y="44" font-family="-apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, sans-serif" font-size="26" font-weight="800" letter-spacing="-0.5">
+    <tspan fill="url(#smartx-grad)">Smart</tspan>
+    <tspan fill="#6366F1">-X</tspan>
+  </text>
+  
+  <text x="80" y="58" font-family="-apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, sans-serif" font-size="11" font-weight="600" letter-spacing="2" fill="#94A3B8">
+    GATEWAY
+  </text>
+</svg>

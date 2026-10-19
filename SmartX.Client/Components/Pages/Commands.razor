@@ -16,7 +16,7 @@
 
 @if (_error is not null)
 {
-    <p class="cmd-error">⚠ @_error</p>
+    <p class="cmd-error">@_error</p>
 }
 
 @if (_commandMessage is not null)
@@ -156,7 +156,6 @@
 
 <section class="card">
     <div class="live-indicator">
-        <span class="live-dot"></span>
         <h2 class="live-heading">Live devices</h2>
     </div>
     <p style="color: var(--text-tertiary); margin-bottom: var(--space-lg);">
@@ -195,14 +194,14 @@
                 <tbody>
                     @foreach (var d in SortedDevices)
                     {
-                        <tr class="row-@d.Status.ToString().ToLower()">
+                        <tr @key="d.MacAddress" class="row-@d.Status.ToString().ToLower()">
                             <td class="mono">@d.MacAddress</td>
                             <td>@d.DeploymentLocation</td>
                             <td>@d.Category</td>
                             <td>
                                 <span class="status-badge status-@d.Status.ToString().ToLower()">@StatusLabel(d.Status)</span>
                             </td>
-                            <td>@(d.LastValue is null ? "—" : $"{d.LastValue.Value:F1} {d.LastUnit}")</td>
+                            <td class="mono">@(d.LastValue is null ? "—" : $"{d.LastValue.Value:F1} {d.LastUnit}")</td>
                             <td>@Ago(d.LastSeen)</td>
                             <td>@AlertsFor(d.MacAddress)</td>
                         </tr>
