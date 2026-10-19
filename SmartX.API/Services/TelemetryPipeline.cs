@@ -19,15 +19,19 @@ namespace SmartX.API.Services
         public const int PowerSpikePriority = 0;
         public const int MoistureDropPriority = 1;
 
+        // Critical thresholds (also used by the suggestion engine to spot devices nearing them).
+        public const double PowerSpikeWatts = 3000;
+        public const double MoistureCriticalPercent = 20;
+
         /// <summary>Decides whether a packet is critical, and how urgent it is.</summary>
         public static bool TryGetCriticalPriority(TelemetryPacket<double> packet, out int priority)
         {
             switch (packet.Unit)
             {
-                case "W" when packet.Value > 3000:       // severe power spike
+                case "W" when packet.Value > PowerSpikeWatts:       // severe power spike
                     priority = PowerSpikePriority;
                     return true;
-                case "%" when packet.Value < 20:         // critical moisture drop
+                case "%" when packet.Value < MoistureCriticalPercent:         // critical moisture drop
                     priority = MoistureDropPriority;
                     return true;
                 default:
