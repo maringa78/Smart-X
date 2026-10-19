@@ -1029,4 +1029,40 @@ main {
     .telemetry-time {
         text-align: left;
     }
+    /* ===== MAIN NAVIGATION (three pillars) — paste at the END of app.css ===== */
+    .topbar nav {
+        gap: 2rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+        .topbar nav a.active {
+            color: var(--color-primary);
+        }
+
+            .topbar nav a.active::after {
+                width: 100%;
+            }
+
+        .topbar nav .nav-disabled {
+            font-size: 0.95rem;
+            font-weight: 500;
+            padding: var(--space-sm) 0;
+            color: var(--text-muted);
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+    @media (max-width: 900px) {
+        .topbar {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: var(--space-md);
+        }
+
+            .topbar nav {
+                justify-content: flex-start;
+                gap: var(--space-lg);
+            }
+    }
 }
