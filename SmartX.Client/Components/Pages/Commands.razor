@@ -145,7 +145,76 @@
         </div>
     }
 </section>
+<section class="card override-card">
+    <h2>Manual override</h2>
+    <p class="override-hint">
+        Send a command to a device. Every command is pushed onto a stack, so Undo always reverses the most recent one first.
+    </p>
 
+    <div class="override-bar">
+        <div class="form-row">
+            <label for="override-device">Device</label>
+            <select id="override-device" value="@State.CommandDeviceId" @onchange="OnCommandDeviceChanged">
+                <option value="">Select a device…</option>
+                @foreach (var device in _devices.OrderBy(x => x.DeploymentLocation))
+                {
+                    <option value="@device.MacAddress">@device.DeploymentLocation (@device.MacAddress)</option>
+                }
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="override-control">Control</label>
+            <select id="override-control" value="@State.CommandName" @onchange="OnCommandNameChanged">
+                @foreach (var control in ControlNames)
+                {
+                    <option value="@control">@control</option>
+                }
+            </select>
+        </div>
+        <div class="override-actions">
+            <button type="button" class="btn-primary" disabled="@(!CanSend)" @onclick="@(() => SendCommandAsync("On"))">Turn on</button>
+            <button type="button" class="btn-secondary" disabled="@(!CanSend)" @onclick="@(() => SendCommandAsync("Off"))">Turn off</button>
+            <button type="button" class="btn-secondary" disabled="@(_history.Count == 0)" @onclick="UndoAsync">Undo last</button>
+        </div>
+    </div>
+
+    @if (_commandMessage is not null)
+    {
+        <p class="@(_commandFailed ? "cmd-error" : "cmd-ok")">@_commandMessage</p>
+    }
+</section>
+
+<section class="card">
+    <h2>Command history</h2>
+    @if (_history.Count == 0)
+    {
+        <p style="color: var(--text-tertiary); padding: var(--space-md) 0; text-align: center;">
+            No commands issued yet.
+        </p>
+    }
+    else
+    {
+        <ul class="history-list">
+            @foreach (var (command, index) in _history.Take(10).Select((c, i) => (c, i)))
+            {
+                <li class="history-item @(index == 0 ? "history-latest" : "")">
+                    <span class="history-control">@command.Name</span>
+                    <span>@DeviceName(command.DeviceId)</span>
+                    <span class="history-change">@command.PreviousState → @command.State</span>
+                    <span class="history-time">@Ago(command.IssuedAt)</span>
+                    @if (index == 0)
+                    {
+                        <span class="history-tag">next to undo</span>
+                    }
+                </li>
+            }
+        </ul>
+        @if (_history.Count > 10)
+        {
+            <p class="override-hint">Showing the 10 most recent of @_history.Count commands.</p>
+        }
+    }
+</section>
 @code {
     private List<SensorRecord> _devices = new();   // every registered device (for the summary cards)
     private List<SensorRecord> _results = new();   // devices matching the current search and filters
@@ -153,6 +222,10 @@
     private AlertsResponse _alerts = new();
     private string? _error;
     private readonly CancellationTokenSource _cts = new();
+    private static readonly string[] ControlNames = { "WaterPump", "Relay1", "Valve1" };
+    private List<CommandRecord> _history = new();   // newest first, straight from the API's stack
+    private string? _commandMessage;
+    private bool _commandFailed;
 
     private bool FiltersActive =>
         !string.IsNullOrWhiteSpace(State.SearchText) ||
@@ -183,7 +256,7 @@
 
     // logSearch is true only when the user deliberately submits a search, so the
     // suggestion engine learns from real searches and not from background refreshes.
-    private async Task RefreshAsync(bool logSearch = false)
+      private async Task RefreshAsync(bool logSearch = false)
     {
         try
         {
@@ -191,12 +264,14 @@
             var resultsTask = Api.SearchDevicesAsync(State.SearchText, State.CategoryFilter, State.StatusFilter, logSearch);
             var queueTask = Api.GetPipelineStatusAsync();
             var alertsTask = Api.GetAlertsAsync();
-            await Task.WhenAll(devicesTask, resultsTask, queueTask, alertsTask);
+            var historyTask = Api.GetCommandHistoryAsync();
+            await Task.WhenAll(devicesTask, resultsTask, queueTask, alertsTask, historyTask);
 
             _devices = devicesTask.Result;
             _results = resultsTask.Result;
             _queue = queueTask.Result;
             _alerts = alertsTask.Result;
+            _history = historyTask.Result;
             _error = null;
         }
         catch (HttpRequestException)
@@ -281,4 +356,57 @@
         _cts.Cancel();
         _cts.Dispose();
     }
+    private bool CanSend =>
+        !string.IsNullOrEmpty(State.CommandDeviceId) && !string.IsNullOrEmpty(State.CommandName);
+
+    private void OnCommandDeviceChanged(ChangeEventArgs e) =>
+        State.CommandDeviceId = e.Value?.ToString() ?? string.Empty;
+
+    private void OnCommandNameChanged(ChangeEventArgs e) =>
+        State.CommandName = e.Value?.ToString() ?? string.Empty;
+
+    private async Task SendCommandAsync(string state)
+    {
+        if (!CanSend) return;
+
+        try
+        {
+            var issued = await Api.IssueCommandAsync(State.CommandDeviceId, State.CommandName, state);
+            SetMessage(issued is null
+                ? "The API rejected that command."
+                : $"Sent: {issued.Name} {issued.State} on {DeviceName(issued.DeviceId)}.",
+                failed: issued is null);
+            await RefreshAsync();
+        }
+        catch (HttpRequestException)
+        {
+            SetMessage("Cannot reach the API. Check that SmartX.API is running.", failed: true);
+        }
+    }
+
+    private async Task UndoAsync()
+    {
+        try
+        {
+            var undone = await Api.UndoCommandAsync();
+            SetMessage(undone is null
+                ? "There are no commands to undo."
+                : $"Undone: {undone.Name} on {DeviceName(undone.DeviceId)} set back to {undone.PreviousState}.",
+                failed: undone is null);
+            await RefreshAsync();
+        }
+        catch (HttpRequestException)
+        {
+            SetMessage("Cannot reach the API. Check that SmartX.API is running.", failed: true);
+        }
+    }
+
+    private void SetMessage(string message, bool failed)
+    {
+        _commandMessage = message;
+        _commandFailed = failed;
+    }
+
+    private string DeviceName(string mac) =>
+        _devices.FirstOrDefault(d => d.MacAddress == mac)?.DeploymentLocation ?? mac;
 }
