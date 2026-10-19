@@ -3,9 +3,13 @@
 <div class="page">
     <header class="topbar">
         <div class="brand">Smart-X Gateway</div>
-        <nav class="topbar-nav">
-            <a href="/">Dashboard</a>
-            <a href="/sensors">Sensors</a>
+        <nav class="topbar-nav" aria-label="Main navigation">
+            <NavLink href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
+            <NavLink href="/sensors">Sensor Ingestion &amp; Telemetry</NavLink>
+            <NavLink href="/commands">Command Stream &amp; History</NavLink>
+            <span class="nav-disabled" aria-disabled="true" title="Coming in the final PoE">
+                Network Topology &amp; Mesh Routing
+            </span>
         </nav>
     </header>
     <main>
