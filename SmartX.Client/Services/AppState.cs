@@ -17,8 +17,10 @@ public class AppState
     public List<TelemetryPacket> TelemetryFeed { get; } = new();
     public string? SensorsStatusMessage { get; set; }
 
-    // ----- Real-Time Command Stream and History page (used from the next piece) -----
+    // ----- Real-Time Command Stream and History page -----
+    // The search box and filters live here, so they are still set when the user
+    // switches to another pillar and comes back.
     public string SearchText { get; set; } = string.Empty;
     public SensorCategory? CategoryFilter { get; set; }
-    public string? StatusFilter { get; set; }
+    public DeviceStatus? StatusFilter { get; set; }
 }
