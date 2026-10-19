@@ -4,7 +4,7 @@
     {
         Environmental,
         PowerConsumption,
-        Activator
+        Actuator
 
     }
 
