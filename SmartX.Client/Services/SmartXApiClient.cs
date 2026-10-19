@@ -53,4 +53,25 @@ public class SmartXApiClient(HttpClient http)
         var url = "/api/devices/search" + (parts.Count > 0 ? "?" + string.Join("&", parts) : "");
         return await http.GetFromJsonAsync<List<SensorRecord>>(url) ?? new();
     }
+    // ----- Manual overrides (stack-based history with undo) -----
+
+    public async Task<CommandRecord?> IssueCommandAsync(string deviceId, string name, string state)
+    {
+        var response = await http.PostAsJsonAsync("/api/commands", new { deviceId, name, state });
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<CommandRecord>()
+            : null;
+    }
+
+    /// Pops the newest command off the API's stack. Returns null if there is nothing to undo.
+    public async Task<CommandRecord?> UndoCommandAsync()
+    {
+        var response = await http.PostAsync("/api/commands/undo", null);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<CommandRecord>()
+            : null;
+    }
+
+    public async Task<List<CommandRecord>> GetCommandHistoryAsync() =>
+        await http.GetFromJsonAsync<List<CommandRecord>>("/api/commands/history") ?? new();
 }
