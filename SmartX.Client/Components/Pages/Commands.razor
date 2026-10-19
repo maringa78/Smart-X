@@ -1,17 +1,189 @@
 ﻿@page "/commands"
+@using SmartX.Client.Models
+@using SmartX.Client.Services
+@inject SmartXApiClient Api
+@implements IDisposable
 
 <PageTitle>Command Stream &amp; History</PageTitle>
 
 <div style="margin-bottom: var(--space-3xl);">
     <h1>Real-Time Command Stream</h1>
     <p style="color: var(--text-secondary); font-size: 1.05rem;">
-        Watch live telemetry, issue manual overrides and act on suggested actions.
+        Watch live device status, spot problems early and act on them.
     </p>
 </div>
 
-<section class="card">
-    <h2>Command dashboard</h2>
-    <p style="color: var(--text-tertiary);">
-        The live device table, override controls and suggestions are added to this page in the next steps.
-    </p>
+@if (_error is not null)
+{
+    <p class="cmd-error">⚠ @_error</p>
+}
+
+<section class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-label">Devices</div>
+        <div class="stat-value">@_devices.Count</div>
+    </div>
+    <div class="stat-card ok">
+        <div class="stat-label">Online</div>
+        <div class="stat-value">@CountWith(DeviceStatus.Online)</div>
+    </div>
+    <div class="stat-card bad">
+        <div class="stat-label">In alert</div>
+        <div class="stat-value">@CountWith(DeviceStatus.Alert)</div>
+    </div>
+    <div class="stat-card muted">
+        <div class="stat-label">Offline</div>
+        <div class="stat-value">@CountWith(DeviceStatus.Offline)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Queued (normal / critical)</div>
+        <div class="stat-value">@_queue.StandardQueued / @_queue.CriticalQueued</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Duplicate alerts blocked</div>
+        <div class="stat-value">@_alerts.SuppressedDuplicates</div>
+    </div>
 </section>
+
+<section class="card">
+    <div class="live-indicator">
+        <span class="live-dot"></span>
+        <h2 class="live-heading">Live devices</h2>
+    </div>
+    <p style="color: var(--text-tertiary); margin-bottom: var(--space-lg);">
+        Refreshes every 2 seconds. Devices that need attention are listed first.
+    </p>
+
+    @if (_devices.Count == 0)
+    {
+        <p style="color: var(--text-tertiary); padding: var(--space-xl) 0; text-align: center;">
+            No devices registered yet. Register sensors, or start the simulator.
+        </p>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="sensor-table">
+                <thead>
+                    <tr>
+                        <th>Device ID</th>
+                        <th>Location</th>
+                        <th>Category</th>
+                        <th>Status</th>
+                        <th>Last reading</th>
+                        <th>Last seen</th>
+                        <th>Active alerts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in SortedDevices)
+                    {
+                        <tr class="row-@d.Status.ToString().ToLower()">
+                            <td class="mono">@d.MacAddress</td>
+                            <td>@d.DeploymentLocation</td>
+                            <td>@d.Category</td>
+                            <td>
+                                <span class="status-badge status-@d.Status.ToString().ToLower()">@StatusLabel(d.Status)</span>
+                            </td>
+                            <td>@(d.LastValue is null ? "—" : $"{d.LastValue.Value:F1} {d.LastUnit}")</td>
+                            <td>@Ago(d.LastSeen)</td>
+                            <td>@AlertsFor(d.MacAddress)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    private List<SensorRecord> _devices = new();
+    private PipelineStatus _queue = new();
+    private AlertsResponse _alerts = new();
+    private string? _error;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _ = PollAsync(_cts.Token);
+    }
+
+    // Re-reads everything from the API every 2 seconds until the user leaves the page.
+    private async Task PollAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await RefreshAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            var devicesTask = Api.GetSensorsAsync();
+            var queueTask = Api.GetPipelineStatusAsync();
+            var alertsTask = Api.GetAlertsAsync();
+            await Task.WhenAll(devicesTask, queueTask, alertsTask);
+
+            _devices = devicesTask.Result;
+            _queue = queueTask.Result;
+            _alerts = alertsTask.Result;
+            _error = null;
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Cannot reach the API. Check that SmartX.API is running.";
+        }
+    }
+
+    // Alert and offline devices first, then online, then devices that have not reported yet.
+    private IEnumerable<SensorRecord> SortedDevices =>
+        _devices.OrderBy(d => Rank(d.Status)).ThenBy(d => d.DeploymentLocation);
+
+    private static int Rank(DeviceStatus status) => status switch
+    {
+        DeviceStatus.Alert => 0,
+        DeviceStatus.Offline => 1,
+        DeviceStatus.Online => 2,
+        _ => 3
+    };
+
+    private int CountWith(DeviceStatus status) => _devices.Count(d => d.Status == status);
+
+    private static string StatusLabel(DeviceStatus status) =>
+        status == DeviceStatus.Registered ? "Awaiting data" : status.ToString();
+
+    private string AlertsFor(string mac)
+    {
+        var types = _alerts.Active.Where(a => a.DeviceId == mac).Select(a => a.Type).ToList();
+        return types.Count == 0 ? "—" : string.Join(", ", types);
+    }
+
+    private static string Ago(DateTime? time)
+    {
+        if (time is null) return "never";
+
+        var seconds = (int)Math.Max(0, (DateTime.UtcNow - time.Value.ToUniversalTime()).TotalSeconds);
+        return seconds switch
+        {
+            < 60 => $"{seconds}s ago",
+            < 3600 => $"{seconds / 60}m ago",
+            _ => $"{seconds / 3600}h ago"
+        };
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}
