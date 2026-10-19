@@ -10,6 +10,7 @@
         TelemetryPipeline pipeline,
         SensorRegistry registry,
         AlertTracker alerts,
+        SuggestionEngine suggestions,
         TelemetryHistory history,
         ILogger<TelemetryProcessor> logger) : BackgroundService
     {
@@ -37,7 +38,10 @@
                     {
                         // Only the first critical reading raises a new alert; repeats are ignored by the set.
                         if (alerts.Raise(packet.SensorId, AlertType.CriticalReading))
+                        {
                             logger.LogWarning("NEW CRITICAL alert: {Packet}", packet);
+                            suggestions.RecordAlert(packet.SensorId, AlertType.CriticalReading);
+                        }
                     }
                     else
                     {
