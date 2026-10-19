@@ -34,4 +34,23 @@ public class SmartXApiClient(HttpClient http)
 
     public async Task<AlertsResponse> GetAlertsAsync() =>
         await http.GetFromJsonAsync<AlertsResponse>("/api/alerts") ?? new();
+
+    /// <summary>
+    /// Asks the API to filter devices by text (device ID or location), category and status.
+    /// logSearch should be true only when the user deliberately submits a search (Enter or
+    /// the Search button), so the suggestion engine learns from real searches and not from
+    /// every keystroke or background refresh.
+    /// </summary>
+    public async Task<List<SensorRecord>> SearchDevicesAsync(
+        string? query, SensorCategory? category, DeviceStatus? status, bool logSearch = false)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(query)) parts.Add($"q={Uri.EscapeDataString(query.Trim())}");
+        if (category is not null) parts.Add($"category={category}");
+        if (status is not null) parts.Add($"status={status}");
+        if (logSearch) parts.Add("log=true");
+
+        var url = "/api/devices/search" + (parts.Count > 0 ? "?" + string.Join("&", parts) : "");
+        return await http.GetFromJsonAsync<List<SensorRecord>>(url) ?? new();
+    }
 }
