@@ -13,6 +13,7 @@ builder.Services.AddSingleton<TelemetryPipeline>();
 builder.Services.AddSingleton<CommandHistory>();
 builder.Services.AddSingleton<AlertTracker>();
 builder.Services.AddSingleton<TelemetryHistory>();
+builder.Services.AddSingleton<SuggestionEngine>();
 builder.Services.AddHostedService<DeviceMonitor>();
 builder.Services.AddHostedService<TelemetryProcessor>();
 builder.Services.AddCors(options =>
@@ -76,7 +77,7 @@ app.MapPost("/api/sensors/{mac}/upload", async (string mac, IFormFile file, Sens
 .DisableAntiforgery();
 
 // ---- Manual override commands (Stack-based history with undo) ----
-app.MapPost("/api/commands", (IssueCommandRequest request, CommandHistory commands) =>
+app.MapPost("/api/commands", (IssueCommandRequest request, CommandHistory commands, SuggestionEngine suggestions) =>
 {
     if (string.IsNullOrWhiteSpace(request.DeviceId) || string.IsNullOrWhiteSpace(request.Name))
         return Results.BadRequest("DeviceId and Name are required.");
@@ -87,7 +88,9 @@ app.MapPost("/api/commands", (IssueCommandRequest request, CommandHistory comman
         return Results.BadRequest("State must be 'On' or 'Off'.");
 
     var normalised = request with { State = string.Equals(state, "On", StringComparison.OrdinalIgnoreCase) ? "On" : "Off" };
-    return Results.Ok(commands.Issue(normalised));
+    var issued = commands.Issue(normalised);
+    suggestions.RecordCommand(issued);
+    return Results.Ok(issued);
 });
 
 app.MapPost("/api/commands/undo", (CommandHistory commands) =>
@@ -118,6 +121,33 @@ app.MapGet("/api/history/{sensorId}", (
 {
     var points = history.Query(sensorId, start, end, limit);
     return Results.Ok(new { sensorId, count = points.Count, points });
+});
+
+// ---- Device search and filter ----
+// Add log=true when the user submits a search, so the engine can learn from it.
+app.MapGet("/api/devices/search", (
+    string? q,
+    SensorCategory? category,
+    DeviceStatus? status,
+    bool? log,
+    SensorRegistry registry,
+    SuggestionEngine suggestions) =>
+{
+    if (log == true && !string.IsNullOrWhiteSpace(q))
+        suggestions.RecordSearch(q);
+
+    return Results.Ok(registry.Search(q, category, status));
+});
+
+// ---- Predictive suggestions ("Suggested Actions" and "Automated Insights") ----
+app.MapGet("/api/suggestions", (SuggestionEngine suggestions, AlertTracker alerts, SensorRegistry registry) =>
+    Results.Ok(suggestions.Suggest(alerts.Active(), registry.All())));
+
+// Fills the engine with simulated operator history for demos and testing.
+app.MapPost("/api/suggestions/demo-history", (SuggestionEngine suggestions) =>
+{
+    suggestions.SeedDemoHistory();
+    return Results.Ok("Simulated operator history added.");
 });
 
 app.Run();
