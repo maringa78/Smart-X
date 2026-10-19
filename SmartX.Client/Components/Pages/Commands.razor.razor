@@ -1,0 +1,63 @@
+﻿/* Styles for the Command Stream page only (scoped to Commands.razor). */
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: var(--space-md);
+    margin-bottom: var(--space-xl);
+}
+
+.stat-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: var(--space-md) var(--space-lg);
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-xs);
+}
+
+.stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.stat-card.ok .stat-value { color: var(--color-success); }
+.stat-card.bad .stat-value { color: var(--color-error); }
+.stat-card.muted .stat-value { color: var(--text-muted); }
+
+.table-scroll {
+    overflow-x: auto;
+}
+
+.mono {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+}
+
+.status-badge {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: var(--space-xs) var(--space-md);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+.status-online { background: rgba(16, 185, 129, 0.15); color: var(--color-success); }
+.status-alert { background: rgba(239, 68, 68, 0.18); color: var(--color-error); }
+.status-offline { background: rgba(100, 116, 139, 0.2); color: var(--text-tertiary); }
+.status-registered { background: rgba(59, 130, 246, 0.15); color: var(--color-info); }
+
+.row-alert { background: rgba(239, 68, 68, 0.06); }
+.row-offline { opacity: 0.75; }
+
+.cmd-error {
+    color: var(--color-error);
+    font-weight: 500;
+    margin-bottom: var(--space-lg);
+}
