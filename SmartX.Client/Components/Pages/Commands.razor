@@ -19,6 +19,11 @@
     <p class="cmd-error">⚠ @_error</p>
 }
 
+@if (_commandMessage is not null)
+{
+    <p class="@(_commandFailed ? "cmd-error" : "cmd-ok") cmd-message">@_commandMessage</p>
+}
+
 <section class="stat-grid">
     <div class="stat-card">
         <div class="stat-label">Devices</div>
@@ -43,6 +48,68 @@
     <div class="stat-card">
         <div class="stat-label">Duplicate alerts blocked</div>
         <div class="stat-value">@_alerts.SuppressedDuplicates</div>
+    </div>
+</section>
+
+<section class="insight-grid">
+    <div class="card">
+        <h2>Suggested Actions</h2>
+        <p class="override-hint">Predicted from patterns in past alerts, searches and commands.</p>
+
+        @if (_suggestions.SuggestedActions.Count == 0)
+        {
+            <p class="empty-note">
+                No suggestions right now. They appear when current activity matches a pattern the engine has learned.
+            </p>
+            <button type="button" class="btn-secondary" @onclick="LoadDemoHistoryAsync">Load demo history</button>
+        }
+        else
+        {
+            <ul class="suggestion-list">
+                @foreach (var action in _suggestions.SuggestedActions)
+                {
+                    <li class="suggestion-item">
+                        <div class="suggestion-main">
+                            <span class="suggestion-kind kind-@action.Kind.ToLower()">@action.Kind</span>
+                            <span class="suggestion-label">@action.Label</span>
+                            <span class="suggestion-confidence">@($"{action.Confidence:P0}") sure</span>
+                        </div>
+                        <p class="suggestion-reason">@action.Reason</p>
+                        <button type="button" class="btn-secondary" @onclick="@(() => ApplySuggestionAsync(action))">@ApplyLabel(action)</button>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+
+    <div class="card">
+        <h2>Automated Insights</h2>
+        <p class="override-hint">Devices that need attention, most urgent first.</p>
+
+        @if (_suggestions.Insights.Count == 0)
+        {
+            <p class="empty-note healthy">All devices look healthy.</p>
+        }
+        else
+        {
+            <ul class="insight-list">
+                @foreach (var insight in _suggestions.Insights.Take(8))
+                {
+                    <li class="insight-item insight-@insight.Severity.ToLower()">
+                        <span class="insight-badge">@insight.Severity</span>
+                        <div class="insight-body">
+                            <div class="mono">@insight.DeviceId</div>
+                            <div>@insight.Message</div>
+                        </div>
+                        <button type="button" class="btn-secondary" @onclick="@(() => FocusDeviceAsync(insight.DeviceId))">Show</button>
+                    </li>
+                }
+            </ul>
+            @if (_suggestions.Insights.Count > 8)
+            {
+                <p class="override-hint">And @(_suggestions.Insights.Count - 8) more.</p>
+            }
+        }
     </div>
 </section>
 
@@ -145,6 +212,7 @@
         </div>
     }
 </section>
+
 <section class="card override-card">
     <h2>Manual override</h2>
     <p class="override-hint">
@@ -177,11 +245,6 @@
             <button type="button" class="btn-secondary" disabled="@(_history.Count == 0)" @onclick="UndoAsync">Undo last</button>
         </div>
     </div>
-
-    @if (_commandMessage is not null)
-    {
-        <p class="@(_commandFailed ? "cmd-error" : "cmd-ok")">@_commandMessage</p>
-    }
 </section>
 
 <section class="card">
@@ -215,17 +278,19 @@
         }
     }
 </section>
+
 @code {
     private List<SensorRecord> _devices = new();   // every registered device (for the summary cards)
     private List<SensorRecord> _results = new();   // devices matching the current search and filters
     private PipelineStatus _queue = new();
     private AlertsResponse _alerts = new();
-    private string? _error;
-    private readonly CancellationTokenSource _cts = new();
     private static readonly string[] ControlNames = { "WaterPump", "Relay1", "Valve1" };
+    private SuggestionResult _suggestions = new();
     private List<CommandRecord> _history = new();   // newest first, straight from the API's stack
     private string? _commandMessage;
     private bool _commandFailed;
+    private string? _error;
+    private readonly CancellationTokenSource _cts = new();
 
     private bool FiltersActive =>
         !string.IsNullOrWhiteSpace(State.SearchText) ||
@@ -256,7 +321,7 @@
 
     // logSearch is true only when the user deliberately submits a search, so the
     // suggestion engine learns from real searches and not from background refreshes.
-      private async Task RefreshAsync(bool logSearch = false)
+    private async Task RefreshAsync(bool logSearch = false)
     {
         try
         {
@@ -265,13 +330,15 @@
             var queueTask = Api.GetPipelineStatusAsync();
             var alertsTask = Api.GetAlertsAsync();
             var historyTask = Api.GetCommandHistoryAsync();
-            await Task.WhenAll(devicesTask, resultsTask, queueTask, alertsTask, historyTask);
+            var suggestionsTask = Api.GetSuggestionsAsync();
+            await Task.WhenAll(devicesTask, resultsTask, queueTask, alertsTask, historyTask, suggestionsTask);
 
             _devices = devicesTask.Result;
             _results = resultsTask.Result;
             _queue = queueTask.Result;
             _alerts = alertsTask.Result;
             _history = historyTask.Result;
+            _suggestions = suggestionsTask.Result;
             _error = null;
         }
         catch (HttpRequestException)
@@ -279,6 +346,115 @@
             _error = "Cannot reach the API. Check that SmartX.API is running.";
         }
     }
+
+    // ----- Manual override handlers -----
+
+    private bool CanSend =>
+        !string.IsNullOrEmpty(State.CommandDeviceId) && !string.IsNullOrEmpty(State.CommandName);
+
+    private void OnCommandDeviceChanged(ChangeEventArgs e) =>
+        State.CommandDeviceId = e.Value?.ToString() ?? string.Empty;
+
+    private void OnCommandNameChanged(ChangeEventArgs e) =>
+        State.CommandName = e.Value?.ToString() ?? string.Empty;
+
+    private Task SendCommandAsync(string state) =>
+        CanSend ? IssueCommandAsync(State.CommandDeviceId, State.CommandName, state) : Task.CompletedTask;
+
+    // Used by the override form and by the "Apply command" button on a suggestion.
+    private async Task IssueCommandAsync(string deviceId, string name, string state)
+    {
+        try
+        {
+            var issued = await Api.IssueCommandAsync(deviceId, name, state);
+            SetMessage(issued is null
+                ? "The API rejected that command."
+                : $"Sent: {issued.Name} {issued.State} on {DeviceName(issued.DeviceId)}.",
+                failed: issued is null);
+            await RefreshAsync();
+        }
+        catch (HttpRequestException)
+        {
+            SetMessage("Cannot reach the API. Check that SmartX.API is running.", failed: true);
+        }
+    }
+
+    // ----- Suggested Actions and Automated Insights -----
+
+    private async Task ApplySuggestionAsync(SuggestedAction action)
+    {
+        switch (action.Kind)
+        {
+            case "Command" when action.DeviceId is not null && action.CommandName is not null && action.State is not null:
+                await IssueCommandAsync(action.DeviceId, action.CommandName, action.State);
+                break;
+
+            case "Search" when action.SearchTerm is not null:
+                State.SearchText = action.SearchTerm;
+                await RefreshAsync(logSearch: true);
+                break;
+
+            case "Watch" when action.DeviceId is not null:
+                await FocusDeviceAsync(action.DeviceId);
+                break;
+        }
+    }
+
+    // Narrows the device table to one device so the operator can look at it straight away.
+    private async Task FocusDeviceAsync(string deviceId)
+    {
+        State.SearchText = deviceId;
+        State.CategoryFilter = null;
+        State.StatusFilter = null;
+        await RefreshAsync();
+    }
+
+    private static string ApplyLabel(SuggestedAction action) => action.Kind switch
+    {
+        "Command" => "Apply command",
+        "Search" => "Run search",
+        _ => "Show device"
+    };
+
+    private async Task LoadDemoHistoryAsync()
+    {
+        try
+        {
+            await Api.SeedDemoHistoryAsync();
+            SetMessage("Simulated operator history loaded. Trigger a moisture drop in the simulator (press M) to see suggestions.", failed: false);
+            await RefreshAsync();
+        }
+        catch (HttpRequestException)
+        {
+            SetMessage("Cannot reach the API. Check that SmartX.API is running.", failed: true);
+        }
+    }
+
+    private async Task UndoAsync()
+    {
+        try
+        {
+            var undone = await Api.UndoCommandAsync();
+            SetMessage(undone is null
+                ? "There are no commands to undo."
+                : $"Undone: {undone.Name} on {DeviceName(undone.DeviceId)} set back to {undone.PreviousState}.",
+                failed: undone is null);
+            await RefreshAsync();
+        }
+        catch (HttpRequestException)
+        {
+            SetMessage("Cannot reach the API. Check that SmartX.API is running.", failed: true);
+        }
+    }
+
+    private void SetMessage(string message, bool failed)
+    {
+        _commandMessage = message;
+        _commandFailed = failed;
+    }
+
+    private string DeviceName(string mac) =>
+        _devices.FirstOrDefault(d => d.MacAddress == mac)?.DeploymentLocation ?? mac;
 
     // ----- Search and filter handlers (the values are kept in AppState) -----
 
@@ -356,57 +532,4 @@
         _cts.Cancel();
         _cts.Dispose();
     }
-    private bool CanSend =>
-        !string.IsNullOrEmpty(State.CommandDeviceId) && !string.IsNullOrEmpty(State.CommandName);
-
-    private void OnCommandDeviceChanged(ChangeEventArgs e) =>
-        State.CommandDeviceId = e.Value?.ToString() ?? string.Empty;
-
-    private void OnCommandNameChanged(ChangeEventArgs e) =>
-        State.CommandName = e.Value?.ToString() ?? string.Empty;
-
-    private async Task SendCommandAsync(string state)
-    {
-        if (!CanSend) return;
-
-        try
-        {
-            var issued = await Api.IssueCommandAsync(State.CommandDeviceId, State.CommandName, state);
-            SetMessage(issued is null
-                ? "The API rejected that command."
-                : $"Sent: {issued.Name} {issued.State} on {DeviceName(issued.DeviceId)}.",
-                failed: issued is null);
-            await RefreshAsync();
-        }
-        catch (HttpRequestException)
-        {
-            SetMessage("Cannot reach the API. Check that SmartX.API is running.", failed: true);
-        }
-    }
-
-    private async Task UndoAsync()
-    {
-        try
-        {
-            var undone = await Api.UndoCommandAsync();
-            SetMessage(undone is null
-                ? "There are no commands to undo."
-                : $"Undone: {undone.Name} on {DeviceName(undone.DeviceId)} set back to {undone.PreviousState}.",
-                failed: undone is null);
-            await RefreshAsync();
-        }
-        catch (HttpRequestException)
-        {
-            SetMessage("Cannot reach the API. Check that SmartX.API is running.", failed: true);
-        }
-    }
-
-    private void SetMessage(string message, bool failed)
-    {
-        _commandMessage = message;
-        _commandFailed = failed;
-    }
-
-    private string DeviceName(string mac) =>
-        _devices.FirstOrDefault(d => d.MacAddress == mac)?.DeploymentLocation ?? mac;
 }
