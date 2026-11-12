@@ -230,4 +230,19 @@ app.MapGet("/api/mesh/reachable/{id}", (string id, MeshGraph mesh) =>
         : Results.Ok(new { from = id, count = reachable.Count, nodes = reachable });
 });
 
+// ---- Power-efficient routing (Minimum Spanning Tree, Prim's algorithm) ----
+// The cheapest backbone that keeps every working node connected to the gateway.
+app.MapGet("/api/mesh/mst", (MeshGraph mesh) => Results.Ok(MeshRouting.ComputeMst(mesh)));
+
+// One node's route to the gateway along that backbone.
+app.MapGet("/api/mesh/mst/route/{id}", (string id, MeshGraph mesh) =>
+{
+    if (!mesh.Contains(id)) return Results.NotFound("Unknown node.");
+
+    var route = MeshRouting.RouteFor(MeshRouting.ComputeMst(mesh), id);
+    return route is null
+        ? Results.NotFound("No route: the node is down or cut off from the gateway.")
+        : Results.Ok(route);
+});
+
 app.Run();
