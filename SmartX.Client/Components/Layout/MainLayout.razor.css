@@ -1,0 +1,13 @@
+/* MainLayout scoped styles */
+
+.brand-link {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    transition: opacity var(--transition-fast);
+}
+
+.brand-link:hover {
+    opacity: 0.85;
+}
+

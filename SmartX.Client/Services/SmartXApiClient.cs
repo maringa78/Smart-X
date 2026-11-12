@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Json;
+﻿using System.Net;
+using System.Net.Http.Json;
 using SmartX.Client.Models;
 
 namespace SmartX.Client.Services;
@@ -84,4 +85,50 @@ public class SmartXApiClient(HttpClient http)
     /// <summary>Fills the engine with simulated operator history so the patterns can be demonstrated.</summary>
     public async Task SeedDemoHistoryAsync() =>
         await http.PostAsync("/api/suggestions/demo-history", null);
+
+    // ----- Network Topology and Mesh Routing -----
+
+    public async Task<MeshResponse> GetMeshAsync() =>
+        await http.GetFromJsonAsync<MeshResponse>("/api/mesh") ?? new();
+
+    public async Task<NetworkHealthDto> GetMeshHealthAsync() =>
+        await http.GetFromJsonAsync<NetworkHealthDto>("/api/mesh/health") ?? new();
+
+    public async Task<SpanningTreeDto> GetMstAsync() =>
+        await http.GetFromJsonAsync<SpanningTreeDto>("/api/mesh/mst") ?? new();
+
+    public Task<RouteInfoDto?> GetRouteAsync(string nodeId) =>
+        GetOrNullAsync<RouteInfoDto>($"/api/mesh/route/{Uri.EscapeDataString(nodeId)}");
+
+    public Task<MstRouteDto?> GetMstRouteAsync(string nodeId) =>
+        GetOrNullAsync<MstRouteDto>($"/api/mesh/mst/route/{Uri.EscapeDataString(nodeId)}");
+
+    /// <summary>Marks a node as failed (down) or working again (up) in the mesh.</summary>
+    public async Task SetNodeStateAsync(string nodeId, bool down) =>
+        await http.PostAsync($"/api/mesh/nodes/{Uri.EscapeDataString(nodeId)}/{(down ? "down" : "up")}", null);
+
+    /// <summary>Readings for one sensor in a time range, answered by the API's AVL tree.</summary>
+    public async Task<ArchiveResponse> GetArchiveAsync(string sensorId, DateTime? start, DateTime? end)
+    {
+        var query = new List<string>();
+        if (start is not null)
+            query.Add($"from={Uri.EscapeDataString(start.Value.ToUniversalTime().ToString("o"))}");
+        if (end is not null)
+            query.Add($"to={Uri.EscapeDataString(end.Value.ToUniversalTime().ToString("o"))}");
+
+        var url = $"/api/archive/{Uri.EscapeDataString(sensorId)}";
+        if (query.Count > 0) url += "?" + string.Join("&", query);
+
+        return await http.GetFromJsonAsync<ArchiveResponse>(url) ?? new();
+    }
+
+    // Returns null for a 404 instead of throwing (for example a node with no route).
+    private async Task<T?> GetOrNullAsync<T>(string url) where T : class
+    {
+        var response = await http.GetAsync(url);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<T>();
+    }
 }

@@ -4,15 +4,15 @@
 <div class="page">
     <header class="topbar">
         <div class="brand">
-            <img src="images/smartx-logo.svg" alt="Smart-X Gateway" />
+            <a href="/" class="brand-link" title="Smart-X Gateway">
+                <img src="images/smartx-logo.svg" alt="Smart-X Gateway" />
+            </a>
         </div>
         <nav class="topbar-nav" aria-label="Main navigation">
             <NavLink href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
             <NavLink href="/sensors">Sensor Ingestion &amp; Telemetry</NavLink>
             <NavLink href="/commands">Command Stream &amp; History</NavLink>
-            <span class="nav-disabled" aria-disabled="true" title="Coming in the final PoE">
-                Network Topology &amp; Mesh Routing
-            </span>
+            <NavLink href="/topology">Network Topology &amp; Mesh Routing</NavLink>
             <button type="button"
                     class="theme-toggle @(_isDarkTheme ? "is-dark" : "")"
                     aria-label="@(_isDarkTheme ? "Switch to light mode" : "Switch to dark mode")"
@@ -28,6 +28,8 @@
     <main class="page-content">
         @Body
     </main>
+
+    <IntroLandingModal />
 </div>
 
 @code {

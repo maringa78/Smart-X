@@ -1,0 +1,532 @@
+﻿@page "/topology"
+@using System.Globalization
+@using SmartX.Client.Models
+@using SmartX.Client.Services
+@inject SmartXApiClient Api
+@inject AppState State
+@implements IDisposable
+
+<PageTitle>Network Topology &amp; Mesh Routing</PageTitle>
+
+<div style="margin-bottom: var(--space-3xl);">
+    <h1>Network Topology &amp; Mesh Routing</h1>
+    <p style="color: var(--text-secondary); font-size: 1.05rem;">
+        See how data hops through the mesh to reach the gateway, what happens when a node fails,
+        and which links form the most power-efficient backbone.
+    </p>
+</div>
+
+@if (_error is not null)
+{
+    <p class="topo-error"> @_error</p>
+}
+
+<div class="topo-grid">
+
+    @* ---------- the drawn mesh ---------- *@
+    <section class="card">
+        <div class="live-indicator">
+            <span class="live-dot"></span>
+            <h2 class="live-heading">Mesh network</h2>
+        </div>
+
+        <label class="check-row">
+            <input type="checkbox" @bind="State.TopologyShowBackbone" />
+            Highlight the power-efficient backbone (minimum spanning tree)
+        </label>
+
+        <div class="legend">
+            <span><i class="swatch sw-route"></i> Selected node's route</span>
+            <span><i class="swatch sw-mst"></i> Backbone link</span>
+            <span><i class="swatch sw-down"></i> Inactive link</span>
+            <span><i class="swatch sw-alert"></i> Node in alert</span>
+        </div>
+
+        <svg class="mesh-svg" viewBox="0 0 640 480" role="img" aria-label="Mesh network diagram">
+            @foreach (var link in _mesh.Links)
+            {
+                if (!_pos.TryGetValue(link.From, out var a) || !_pos.TryGetValue(link.To, out var b)) continue;
+
+                <line x1="@F(a.X)" y1="@F(a.Y)" x2="@F(b.X)" y2="@F(b.Y)" class="@LinkClass(link)" />
+                <svg:text x="@F((a.X + b.X) / 2)" y="@F((a.Y + b.Y) / 2)" class="link-cost" text-anchor="middle" dy="-4">@link.Cost</svg:text>
+            }
+
+            @foreach (var node in _mesh.Nodes)
+            {
+                if (!_pos.TryGetValue(node.Id, out var p)) continue;
+
+                <g class="@NodeClass(node)" @onclick="() => SelectAsync(node.Id)">
+                    <title>@NodeTooltip(node)</title>
+                    <circle cx="@F(p.X)" cy="@F(p.Y)" r="@(node.IsGateway ? "28" : "21")" />
+                    <svg:text x="@F(p.X)" y="@F(p.Y)" class="node-label" text-anchor="middle" dy=".35em">@Short(node.Id)</svg:text>
+                    @if (node.IsDown)
+                    {
+                        <svg:text x="@F(p.X + 17)" y="@F(p.Y - 15)" class="node-x" text-anchor="middle">✕</svg:text>
+                    }
+                </g>
+            }
+        </svg>
+        <p class="hint">Click a node to track it. Numbers on the links are the power cost of that hop.</p>
+    </section>
+
+    @* ---------- side panels ---------- *@
+    <div class="side">
+
+        <section class="card">
+            <h2>Track a node</h2>
+            <div class="track-row">
+                <input class="text-input" list="node-ids" placeholder="Device ID, e.g. AA:BB:CC:DD:EE:23"
+                       @bind="_typedNode" @bind:event="oninput" @onkeydown="OnTrackKey" />
+                <button class="btn-primary small" @onclick="TrackTypedAsync">Track</button>
+            </div>
+            <datalist id="node-ids">
+                @foreach (var node in _mesh.Nodes)
+                {
+                    <option value="@node.Id"></option>
+                }
+            </datalist>
+            @if (_typedMessage is not null)
+            {
+                <p class="topo-error">@_typedMessage</p>
+            }
+
+            @if (State.TopologyNode is null)
+            {
+                <p class="hint">Pick a node on the diagram, or type its ID, to see its route to the gateway.</p>
+            }
+            else if (SelectedNode is { } selected)
+            {
+                <div class="route-box">
+                    <div class="route-title">
+                        <span class="mono">@selected.Id</span>
+                        @if (_route is not null)
+                        {
+                            <span class="badge route-@_route.Status.ToLower()">@_route.Status</span>
+                        }
+                    </div>
+                    <div class="route-meta">@(selected.Location ?? (selected.IsGateway ? "Gateway hub" : "Not registered as a device"))</div>
+
+                    @if (selected.IsGateway)
+                    {
+                        <p class="hint">This is the central gateway. Every route ends here.</p>
+                    }
+                    else if (_route is not null)
+                    {
+                        @if (_route.Status == "Down")
+                        {
+                            <p class="route-line">This node is down, so it cannot send data.</p>
+                            <p class="route-line muted">Normal route: @PathText(_route.NormalPath)</p>
+                        }
+                        else if (_route.Status == "Isolated")
+                        {
+                            <p class="route-line">Every route to the gateway is broken. This node is cut off.</p>
+                            <p class="route-line muted">Normal route: @PathText(_route.NormalPath)</p>
+                        }
+                        else
+                        {
+                            <p class="route-line"><strong>Current route</strong> (@_route.Hops hops): @PathText(_route.CurrentPath)</p>
+                            <p class="route-line">Next hop: <span class="mono">@(_route.NextHop is null ? "-" : Short(_route.NextHop))</span></p>
+                            @if (_route.Status == "Rerouted")
+                            {
+                                <p class="route-line muted">Normal route was: @PathText(_route.NormalPath)</p>
+                            }
+                        }
+
+                        @if (_mstRoute is not null && !selected.IsGateway)
+                        {
+                            <p class="route-line"><strong>Power-efficient (backbone) route</strong>: @PathText(_mstRoute.Path)
+                                <span class="muted">- power cost @_mstRoute.PowerCost.ToString("0.#", CultureInfo.InvariantCulture)</span></p>
+                        }
+                    }
+
+                    @if (!selected.IsGateway)
+                    {
+                        <button class="btn-secondary small" @onclick="ToggleNodeAsync">
+                            @(selected.IsDown ? "Bring this node up" : "Simulate this node failing")
+                        </button>
+                    }
+                </div>
+            }
+
+            @if (_mesh.Nodes.Any(n => n.IsDown))
+            {
+                <button class="btn-secondary small" style="margin-top: var(--space-md);" @onclick="BringAllUpAsync">Bring all nodes up</button>
+            }
+        </section>
+
+        <section class="card">
+            <h2>Network health</h2>
+            <div class="mini-stats">
+                <div><span class="mini-value ok">@_health.Connected.Count</span><span class="mini-label">connected</span></div>
+                <div><span class="mini-value bad">@_health.DownNodes.Count</span><span class="mini-label">down</span></div>
+                <div><span class="mini-value warn">@_health.IsolatedNodes.Count</span><span class="mini-label">cut off</span></div>
+                <div><span class="mini-value">@_health.Rerouted.Count</span><span class="mini-label">rerouted</span></div>
+            </div>
+
+            @if (_health.Rerouted.Count == 0 && _health.IsolatedNodes.Count == 0 && _health.DownNodes.Count == 0)
+            {
+                <p class="hint">All nodes are working and using their normal routes.</p>
+            }
+
+            @foreach (var r in _health.Rerouted)
+            {
+                <p class="route-line"><span class="mono">@Short(r.NodeId)</span> detours: <span class="muted">@PathText(r.NormalPath)</span> → @PathText(r.CurrentPath)</p>
+            }
+
+            @foreach (var group in _health.IsolatedGroups)
+            {
+                <p class="route-line warn-text">Cut off from the gateway: @string.Join(", ", group.Select(Short))</p>
+            }
+        </section>
+
+        <section class="card">
+            <h2>Power-efficient backbone</h2>
+            <div class="mini-stats">
+                <div><span class="mini-value">@Num(_mst.TotalCost)</span><span class="mini-label">backbone cost</span></div>
+                <div><span class="mini-value">@Num(_mst.AllLinksCost)</span><span class="mini-label">all links</span></div>
+                <div><span class="mini-value ok">@_mst.SavedPercent.ToString("0.#", CultureInfo.InvariantCulture)%</span><span class="mini-label">power saved</span></div>
+            </div>
+            <p class="hint">
+                Prim's algorithm picks the cheapest @_mst.Edges.Count links that keep every working node
+                connected. It is recalculated whenever a node fails.
+                @if (_mst.Excluded.Count > 0)
+                {
+                    <span>Left out: @string.Join(", ", _mst.Excluded.Select(Short)).</span>
+                }
+            </p>
+        </section>
+    </div>
+</div>
+
+@* ---------- historical log ---------- *@
+<section class="card" style="margin-top: var(--space-xl);">
+    <h2>Telemetry history log</h2>
+
+    @if (State.TopologyNode is null)
+    {
+        <p class="hint">Select a node to see its historical readings.</p>
+    }
+    else if (State.TopologyNode == GatewayId)
+    {
+        <p class="hint">The gateway does not produce telemetry. Select a sensor node.</p>
+    }
+    else
+    {
+        <div class="log-controls">
+            <span class="mono">@State.TopologyNode</span>
+
+            <label>
+                Time range
+                <select class="text-input" @bind="State.TopologyWindow" @bind:after="LoadSelectionAsync">
+                    <option value="15">Last 15 minutes</option>
+                    <option value="60">Last hour</option>
+                    <option value="120">Last 2 hours</option>
+                    <option value="1440">Last 24 hours</option>
+                    <option value="custom">Custom range</option>
+                </select>
+            </label>
+
+            @if (State.TopologyWindow == "custom")
+            {
+                <label>From
+                    <input type="datetime-local" class="text-input" @bind="State.TopologyCustomFrom" @bind:after="LoadSelectionAsync" />
+                </label>
+                <label>To
+                    <input type="datetime-local" class="text-input" @bind="State.TopologyCustomTo" @bind:after="LoadSelectionAsync" />
+                </label>
+            }
+        </div>
+
+        @if (_archive is null || _archive.Readings.Count == 0)
+        {
+            <p class="hint">No readings in this range yet.</p>
+        }
+        else
+        {
+            var readings = _archive.Readings;
+            var unit = readings[0].Unit;
+
+            <div class="mini-stats">
+                <div><span class="mini-value">@readings.Count</span><span class="mini-label">readings</span></div>
+                <div><span class="mini-value">@readings.Min(r => r.Value).ToString("0.#", CultureInfo.InvariantCulture) @unit</span><span class="mini-label">lowest</span></div>
+                <div><span class="mini-value">@readings.Max(r => r.Value).ToString("0.#", CultureInfo.InvariantCulture) @unit</span><span class="mini-label">highest</span></div>
+                <div><span class="mini-value">@readings.Average(r => r.Value).ToString("0.#", CultureInfo.InvariantCulture) @unit</span><span class="mini-label">average</span></div>
+            </div>
+
+            <p class="hint">
+                Answered by the AVL tree: @_archive.Stats.TotalReadings.ToString("N0") readings stored for this sensor,
+                tree height @_archive.Stats.TreeHeight, and only @_archive.Stats.NodesVisited.ToString("N0") nodes
+                visited to find this range.
+            </p>
+
+            <div class="table-scroll">
+                <table class="sensor-table">
+                    <thead>
+                        <tr><th>Time</th><th>Value</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in readings.OrderByDescending(x => x.Timestamp).Take(MaxLogRows))
+                        {
+                            var level = Level(r);
+                            <tr>
+                                <td class="mono">@r.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                <td>@r.Value.ToString("0.#", CultureInfo.InvariantCulture) @r.Unit</td>
+                                <td><span class="badge level-@level">@level</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (readings.Count > MaxLogRows)
+            {
+                <p class="hint">Showing the latest @MaxLogRows of @readings.Count readings in this range.</p>
+            }
+        }
+    }
+</section>
+
+@code {
+    private const string GatewayId = "GATEWAY";
+    private const int MaxLogRows = 100;
+
+    private MeshResponse _mesh = new();
+    private NetworkHealthDto _health = new();
+    private SpanningTreeDto _mst = new();
+    private AlertsResponse _alerts = new();
+    private RouteInfoDto? _route;
+    private MstRouteDto? _mstRoute;
+    private ArchiveResponse? _archive;
+
+    private readonly Dictionary<string, (double X, double Y)> _pos = new();
+    private HashSet<string> _routeKeys = new();
+    private HashSet<string> _mstKeys = new();
+
+    private string _typedNode = string.Empty;
+    private string? _typedMessage;
+    private string? _error;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _typedNode = State.TopologyNode ?? string.Empty;
+        await RefreshAsync();
+        _ = PollAsync(_cts.Token);
+    }
+
+    // Re-reads the network every 2 seconds until the user leaves the page.
+    private async Task PollAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await RefreshAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            var meshTask = Api.GetMeshAsync();
+            var healthTask = Api.GetMeshHealthAsync();
+            var mstTask = Api.GetMstAsync();
+            var alertsTask = Api.GetAlertsAsync();
+            await Task.WhenAll(meshTask, healthTask, mstTask, alertsTask);
+
+            _mesh = meshTask.Result;
+            _health = healthTask.Result;
+            _mst = mstTask.Result;
+            _alerts = alertsTask.Result;
+
+            ComputeLayout();
+            _mstKeys = _mst.Edges.Select(e => PairKey(e.From, e.To)).ToHashSet();
+
+            await LoadSelectionAsync();
+            _error = null;
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Cannot reach the API. Check that SmartX.API is running.";
+        }
+    }
+
+    // Loads the selected node's routes and its historical readings.
+    private async Task LoadSelectionAsync()
+    {
+        var node = State.TopologyNode;
+        if (node is null)
+        {
+            _route = null;
+            _mstRoute = null;
+            _archive = null;
+            _routeKeys = new HashSet<string>();
+            return;
+        }
+
+        var routeTask = Api.GetRouteAsync(node);
+        var mstRouteTask = Api.GetMstRouteAsync(node);
+        var archiveTask = node == GatewayId
+            ? Task.FromResult<ArchiveResponse?>(null)
+            : LoadArchiveAsync(node);
+
+        await Task.WhenAll(routeTask, mstRouteTask, archiveTask);
+
+        _route = routeTask.Result;
+        _mstRoute = mstRouteTask.Result;
+        _archive = archiveTask.Result;
+        _routeKeys = BuildPairKeys(_route?.CurrentPath);
+    }
+
+    private async Task<ArchiveResponse?> LoadArchiveAsync(string node)
+    {
+        var (start, end) = LogRange();
+        return await Api.GetArchiveAsync(node, start, end);
+    }
+
+    // A preset window always ends "now", so it moves forward on every refresh.
+    private (DateTime? Start, DateTime? End) LogRange()
+    {
+        if (State.TopologyWindow != "custom" && int.TryParse(State.TopologyWindow, out var minutes))
+            return (DateTime.UtcNow.AddMinutes(-minutes), null);
+
+        return (State.TopologyCustomFrom?.ToUniversalTime(), State.TopologyCustomTo?.ToUniversalTime());
+    }
+
+    // ---------- actions ----------
+
+    private async Task SelectAsync(string id)
+    {
+        State.TopologyNode = id;
+        _typedNode = id;
+        _typedMessage = null;
+        await LoadSelectionAsync();
+    }
+
+    private async Task TrackTypedAsync()
+    {
+        var id = _typedNode.Trim();
+        var match = _mesh.Nodes.FirstOrDefault(n => string.Equals(n.Id, id, StringComparison.OrdinalIgnoreCase));
+
+        if (match is null)
+        {
+            _typedMessage = $"No node with the ID \"{id}\" in the mesh.";
+            return;
+        }
+
+        await SelectAsync(match.Id);
+    }
+
+    private async Task OnTrackKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await TrackTypedAsync();
+    }
+
+    private async Task ToggleNodeAsync()
+    {
+        if (SelectedNode is not { IsGateway: false } node) return;
+
+        await Api.SetNodeStateAsync(node.Id, down: !node.IsDown);
+        await RefreshAsync();
+    }
+
+    private async Task BringAllUpAsync()
+    {
+        foreach (var node in _mesh.Nodes.Where(n => n.IsDown).ToList())
+            await Api.SetNodeStateAsync(node.Id, down: false);
+
+        await RefreshAsync();
+    }
+
+    // ---------- drawing helpers ----------
+
+    private MeshNodeDto? SelectedNode =>
+        State.TopologyNode is null ? null : _mesh.Nodes.FirstOrDefault(n => n.Id == State.TopologyNode);
+
+    // The gateway sits in the middle and the other nodes are spaced around it in a circle.
+    private void ComputeLayout()
+    {
+        const double centreX = 320, centreY = 240, radius = 180;
+
+        _pos.Clear();
+        foreach (var gateway in _mesh.Nodes.Where(n => n.IsGateway))
+            _pos[gateway.Id] = (centreX, centreY);
+
+        var others = _mesh.Nodes.Where(n => !n.IsGateway).OrderBy(n => n.Id, StringComparer.Ordinal).ToList();
+        for (var i = 0; i < others.Count; i++)
+        {
+            var angle = -Math.PI / 2 + 2 * Math.PI * i / others.Count;
+            _pos[others[i].Id] = (centreX + radius * Math.Cos(angle), centreY + radius * Math.Sin(angle));
+        }
+    }
+
+    // Numbers in SVG attributes must use a full stop, whatever the computer's region is.
+    private static string F(double value) => value.ToString("0.#", CultureInfo.InvariantCulture);
+
+    private static string Num(double value) => value.ToString("0.#", CultureInfo.InvariantCulture);
+
+    private static string PairKey(string a, string b) =>
+        string.CompareOrdinal(a, b) < 0 ? $"{a}|{b}" : $"{b}|{a}";
+
+    private static HashSet<string> BuildPairKeys(List<string>? path)
+    {
+        var keys = new HashSet<string>();
+        if (path is null) return keys;
+
+        for (var i = 0; i + 1 < path.Count; i++)
+            keys.Add(PairKey(path[i], path[i + 1]));
+        return keys;
+    }
+
+    private string LinkClass(MeshLinkDto link)
+    {
+        if (!link.IsActive) return "link link-down";
+
+        var key = PairKey(link.From, link.To);
+        if (_routeKeys.Contains(key)) return "link link-route";
+        if (State.TopologyShowBackbone && _mstKeys.Contains(key)) return "link link-mst";
+        return "link";
+    }
+
+    private string NodeClass(MeshNodeDto node)
+    {
+        var classes = "node";
+        if (node.IsGateway) classes += " node-gateway";
+        else if (node.IsDown) classes += " node-down";
+        else if (_alerts.Active.Any(a => a.DeviceId == node.Id && a.Type == "CriticalReading")) classes += " node-alert";
+
+        if (node.Id == State.TopologyNode) classes += " node-selected";
+        return classes;
+    }
+
+    private static string NodeTooltip(MeshNodeDto node) =>
+        node.IsGateway ? "Gateway hub" : $"{node.Id}{(node.Location is null ? "" : " - " + node.Location)}{(node.IsDown ? " (down)" : "")}";
+
+    // "AA:BB:CC:DD:EE:23" becomes "EE:23" so routes stay readable.
+    private static string Short(string id) =>
+        id == GatewayId ? "GW" : id.Length > 5 ? id[^5..] : id;
+
+    private static string PathText(List<string> path) => string.Join(" → ", path.Select(Short));
+
+    // Readings are judged against the same limits the API uses for critical alerts.
+    private static string Level(TelemetryPacket r) => r.Unit switch
+    {
+        "W" when r.Value > 3000 => "critical",
+        "W" when r.Value > 2700 => "warning",
+        "%" when r.Value < 20 => "critical",
+        "%" when r.Value < 25 => "warning",
+        _ => "normal"
+    };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}
