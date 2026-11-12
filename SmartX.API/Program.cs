@@ -210,4 +210,24 @@ app.MapPost("/api/mesh/nodes/{id}/down", (string id, MeshGraph mesh) =>
 app.MapPost("/api/mesh/nodes/{id}/up", (string id, MeshGraph mesh) =>
     mesh.MarkUp(id) ? Results.Ok($"{id} is back up.") : Results.NotFound("Unknown node."));
 
+// ---- Mesh traversal (BFS / DFS) ----
+// Whole-network health: connected nodes, failed nodes, isolated nodes and detours.
+app.MapGet("/api/mesh/health", (MeshGraph mesh) => Results.Ok(MeshAnalyzer.Analyze(mesh)));
+
+// Route of one node to the gateway, including its next hop.
+app.MapGet("/api/mesh/route/{id}", (string id, MeshGraph mesh) =>
+{
+    var route = MeshAnalyzer.RouteFor(mesh, id);
+    return route is null ? Results.NotFound("Unknown node.") : Results.Ok(route);
+});
+
+// Every working node reachable from the given node (for example GATEWAY).
+app.MapGet("/api/mesh/reachable/{id}", (string id, MeshGraph mesh) =>
+{
+    var reachable = MeshAnalyzer.Reachable(mesh, id);
+    return reachable is null
+        ? Results.NotFound("Unknown node.")
+        : Results.Ok(new { from = id, count = reachable.Count, nodes = reachable });
+});
+
 app.Run();
