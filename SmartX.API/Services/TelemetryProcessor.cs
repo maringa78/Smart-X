@@ -12,6 +12,7 @@
         AlertTracker alerts,
         SuggestionEngine suggestions,
         TelemetryHistory history,
+        TelemetryArchive archive,
         ILogger<TelemetryProcessor> logger) : BackgroundService
     {
         // Models the time real processing takes per packet (e.g. a database write).
@@ -26,6 +27,7 @@
                 {
                     var knownDevice = registry.RecordTelemetry(packet);
                     history.Add(packet);
+                    archive.Add(packet);
 
                     if (!knownDevice)
                         logger.LogWarning("Telemetry received from unregistered device {SensorId}", packet.SensorId);
