@@ -15,6 +15,7 @@ builder.Services.AddSingleton<AlertTracker>();
 builder.Services.AddSingleton<TelemetryHistory>();
 builder.Services.AddSingleton<SuggestionEngine>();
 builder.Services.AddSingleton<TelemetryArchive>();
+builder.Services.AddSingleton<MeshGraph>();
 builder.Services.AddHostedService<DeviceMonitor>();
 builder.Services.AddHostedService<TelemetryProcessor>();
 builder.Services.AddCors(options =>
@@ -176,5 +177,37 @@ app.MapPost("/api/archive/{sensorId}/seed", (string sensorId, int? count, string
     archive.SeedHistory(sensorId, amount, string.IsNullOrWhiteSpace(unit) ? "%" : unit);
     return Results.Ok($"Added {amount} simulated readings for {sensorId}.");
 });
+
+// ---- Mesh network graph ----
+app.MapGet("/api/mesh", (MeshGraph mesh, SensorRegistry registry) =>
+{
+    var nodes = mesh.Nodes().Select(id => new
+    {
+        id,
+        isGateway = id == MeshGraph.GatewayId,
+        location = id == MeshGraph.GatewayId ? "Gateway Hub" : registry.Get(id)?.DeploymentLocation,
+        isDown = mesh.IsDown(id)
+    });
+
+    var links = mesh.Links().Select(l => new
+    {
+        l.From,
+        l.To,
+        l.Cost,
+        isActive = !mesh.IsDown(l.From) && !mesh.IsDown(l.To)
+    });
+
+    return Results.Ok(new { nodes, links });
+});
+
+// Simulate a node failing or recovering (the simulator's disconnect also does this automatically).
+app.MapPost("/api/mesh/nodes/{id}/down", (string id, MeshGraph mesh) =>
+{
+    if (id == MeshGraph.GatewayId) return Results.BadRequest("The gateway cannot be taken down.");
+    return mesh.MarkDown(id) ? Results.Ok($"{id} is now down.") : Results.NotFound("Unknown node.");
+});
+
+app.MapPost("/api/mesh/nodes/{id}/up", (string id, MeshGraph mesh) =>
+    mesh.MarkUp(id) ? Results.Ok($"{id} is back up.") : Results.NotFound("Unknown node."));
 
 app.Run();
