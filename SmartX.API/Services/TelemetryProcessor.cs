@@ -13,6 +13,7 @@
         SuggestionEngine suggestions,
         TelemetryHistory history,
         TelemetryArchive archive,
+        MeshGraph mesh,
         ILogger<TelemetryProcessor> logger) : BackgroundService
     {
         // Models the time real processing takes per packet (e.g. a database write).
@@ -34,7 +35,10 @@
 
                     // The device is talking again, so any disconnect alert is resolved.
                     if (alerts.Clear(packet.SensorId, AlertType.Disconnected))
+                    {
                         logger.LogInformation("Device {SensorId} reconnected", packet.SensorId);
+                        mesh.MarkUp(packet.SensorId);
+                    }
 
                     if (wasCritical)
                     {
