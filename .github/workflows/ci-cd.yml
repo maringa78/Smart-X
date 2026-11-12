@@ -1,0 +1,53 @@
+name: Smart-X Gateway CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build & Verify Projects
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore Dependencies
+      run: |
+        dotnet restore SmartX.API/SmartX.API.csproj
+        dotnet restore SmartX.Client/SmartX.Client.csproj
+        dotnet restore SmartX.Simulator/SmartX.Simulator.csproj
+
+    - name: Build SmartX.API
+      run: dotnet build SmartX.API/SmartX.API.csproj --configuration Release --no-restore
+
+    - name: Build SmartX.Client
+      run: dotnet build SmartX.Client/SmartX.Client.csproj --configuration Release --no-restore
+
+    - name: Build SmartX.Simulator
+      run: dotnet build SmartX.Simulator/SmartX.Simulator.csproj --configuration Release --no-restore
+
+    - name: Publish API Artifacts
+      run: dotnet publish SmartX.API/SmartX.API.csproj --configuration Release -o publish/api
+
+    - name: Publish Client Artifacts
+      run: dotnet publish SmartX.Client/SmartX.Client.csproj --configuration Release -o publish/client
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: smartx-build-artifacts
+        path: publish/
+        retention-days: 7
+
