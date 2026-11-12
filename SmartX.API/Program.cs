@@ -14,6 +14,7 @@ builder.Services.AddSingleton<CommandHistory>();
 builder.Services.AddSingleton<AlertTracker>();
 builder.Services.AddSingleton<TelemetryHistory>();
 builder.Services.AddSingleton<SuggestionEngine>();
+builder.Services.AddSingleton<TelemetryArchive>();
 builder.Services.AddHostedService<DeviceMonitor>();
 builder.Services.AddHostedService<TelemetryProcessor>();
 builder.Services.AddCors(options =>
@@ -148,6 +149,32 @@ app.MapPost("/api/suggestions/demo-history", (SuggestionEngine suggestions) =>
 {
     suggestions.SeedDemoHistory();
     return Results.Ok("Simulated operator history added.");
+});
+
+// ---- AVL-tree telemetry archive (fast time-range queries) ----
+// Example: /api/archive/AA:BB:CC:DD:EE:11?from=2026-10-18T14:00:00Z&to=2026-10-18T16:00:00Z
+app.MapGet("/api/archive/{sensorId}", (
+    string sensorId,
+    [Microsoft.AspNetCore.Mvc.FromQuery(Name = "from")] DateTime? start,
+    [Microsoft.AspNetCore.Mvc.FromQuery(Name = "to")] DateTime? end,
+    TelemetryArchive archive) =>
+{
+    var result = archive.Query(sensorId, start, end);
+    return Results.Ok(new
+    {
+        sensorId,
+        count = result.Readings.Count,
+        stats = new { totalReadings = result.TotalReadings, nodesVisited = result.NodesVisited, treeHeight = result.TreeHeight },
+        readings = result.Readings
+    });
+});
+
+// Bulk-loads simulated history (one reading per minute, ending now) to demonstrate the tree under load.
+app.MapPost("/api/archive/{sensorId}/seed", (string sensorId, int? count, string? unit, TelemetryArchive archive) =>
+{
+    var amount = Math.Clamp(count ?? 10000, 1, 200000);
+    archive.SeedHistory(sensorId, amount, string.IsNullOrWhiteSpace(unit) ? "%" : unit);
+    return Results.Ok($"Added {amount} simulated readings for {sensorId}.");
 });
 
 app.Run();
